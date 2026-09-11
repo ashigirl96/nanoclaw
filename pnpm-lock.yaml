@@ -20,6 +20,9 @@ importers:
       '@clack/prompts':
         specifier: ^1.2.0
         version: 1.2.0
+      '@nanoco/nanoclaw-dashboard':
+        specifier: ^0.3.0
+        version: 0.3.0
       '@onecli-sh/sdk':
         specifier: 2.2.1
         version: 2.2.1
@@ -349,6 +352,10 @@ packages:
   '@microsoft/teams.graph@2.0.16':
     resolution: {integrity: sha512-tEdVCj76gEdgvxoYkBH3li+mr8Tfe94pp1cSOUMQNwOnsuKYvretKMZfAnt9adJCgGzGH2MYZeDDtgwmOBufGQ==}
     engines: {node: '>=20'}
+
+  '@nanoco/nanoclaw-dashboard@0.3.0':
+    resolution: {integrity: sha512-AT1sLe/PxtSMytMqXOH5xeoFw9gyYpEhXC4XIA4/940Fmw45FWAJfdQzyVRi9JZKhb2b6Qr6nqVfQRgAB3LoaA==}
+    hasBin: true
 
   '@napi-rs/wasm-runtime@1.1.4':
     resolution: {integrity: sha512-3NQNNgA1YSlJb/kMH1ildASP9HW7/7kYnRI2szWJaofaS1hWmbGI4H+d3+22aGzXXN9IJ+n+GiFVcGipJP18ow==}
@@ -2149,6 +2156,8 @@ snapshots:
     transitivePeerDependencies:
       - debug
       - supports-color
+
+  '@nanoco/nanoclaw-dashboard@0.3.0': {}
 
   '@napi-rs/wasm-runtime@1.1.4(@emnapi/core@1.9.2)(@emnapi/runtime@1.9.2)':
     dependencies:
