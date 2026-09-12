@@ -87,6 +87,12 @@ function readImports(file: string): string[] {
 }
 
 export function detectInstalledSkills(root: string): InstalledSkill[] {
+  // A barrel import is not always its own install skill: /add-slack appends
+  // both slack.js and slack-a2a-guard.js, and /slack-a2a-rooms appends
+  // slack-a2a.js. Only names backed by an add-<name> skill can be refreshed.
+  const isRefreshable = (skillName: string): boolean =>
+    fs.existsSync(path.join(root, '.claude/skills', skillName, 'SKILL.md'));
+
   const channels = readImports(path.join(root, 'src/channels/index.ts'))
     .filter((name) => name !== 'cli')
     .map((name) => ({ name, skillName: `add-${name}`, kind: 'channel' as const }));
@@ -103,7 +109,9 @@ export function detectInstalledSkills(root: string): InstalledSkill[] {
       skillName: `add-${name}`,
       kind: 'provider' as const,
     })),
-  ].sort((a, b) => a.skillName.localeCompare(b.skillName));
+  ]
+    .filter((skill) => isRefreshable(skill.skillName))
+    .sort((a, b) => a.skillName.localeCompare(b.skillName));
 }
 
 export function resolveRegistryRemote(root: string, branch: string): string {

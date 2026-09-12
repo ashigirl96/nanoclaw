@@ -44,11 +44,26 @@ describe('installed skill detection', () => {
     write(root, 'src/channels/index.ts', "import './cli.js';\nimport './slack.js';\n");
     write(root, 'src/providers/index.ts', "import './opencode.js';\n");
     write(root, 'container/agent-runner/src/providers/index.ts', "import './claude.js';\nimport './opencode.js';\n");
+    write(root, '.claude/skills/add-slack/SKILL.md', '# add-slack\n');
+    write(root, '.claude/skills/add-opencode/SKILL.md', '# add-opencode\n');
 
     expect(detectInstalledSkills(root)).toEqual([
       { name: 'opencode', skillName: 'add-opencode', kind: 'provider' },
       { name: 'slack', skillName: 'add-slack', kind: 'channel' },
     ]);
+  });
+
+  it('ignores barrel imports that another skill appended', () => {
+    const root = temp('nanoclaw-skills-detect-payload-');
+    write(
+      root,
+      'src/channels/index.ts',
+      "import './cli.js';\nimport './slack.js';\nimport './slack-a2a-guard.js';\nimport './slack-a2a.js';\n",
+    );
+    write(root, '.claude/skills/add-slack/SKILL.md', '# add-slack\n');
+    write(root, '.claude/skills/slack-a2a-rooms/SKILL.md', '# slack-a2a-rooms\n');
+
+    expect(detectInstalledSkills(root)).toEqual([{ name: 'slack', skillName: 'add-slack', kind: 'channel' }]);
   });
 });
 
