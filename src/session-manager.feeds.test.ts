@@ -42,6 +42,7 @@ beforeEach(async () => {
     container_status: 'stopped',
     last_active: null,
     created_at: new Date().toISOString(),
+    engaged_at: null,
   };
   await createSession(sess);
   initSessionFolder(AG, SESS);

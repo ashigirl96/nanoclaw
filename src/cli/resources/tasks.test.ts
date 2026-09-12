@@ -58,6 +58,7 @@ async function createChatSession(group: string, id: string): Promise<void> {
     container_status: 'stopped',
     last_active: null,
     created_at: now(),
+    engaged_at: null,
   });
   initSessionFolder(group, id);
 }
@@ -151,6 +152,7 @@ describe('tasks CLI resource', () => {
       container_status: 'stopped',
       last_active: null,
       created_at: now(),
+      engaged_at: null,
     });
     const missingDir = sessionDir('ag-1', missingSession);
     expect(fs.existsSync(missingDir)).toBe(false);

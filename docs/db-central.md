@@ -162,13 +162,15 @@ CREATE TABLE sessions (
   status             TEXT DEFAULT 'active',
   container_status   TEXT DEFAULT 'stopped',
   last_active        TEXT,
-  created_at         TEXT NOT NULL
+  created_at         TEXT NOT NULL,
+  engaged_at         TEXT          -- local:session-engaged-at (fork-local)
 );
 CREATE INDEX idx_sessions_agent_group ON sessions(agent_group_id);
 CREATE INDEX idx_sessions_lookup     ON sessions(messaging_group_id, thread_id);
 ```
 
 - **Resolved by:** `resolveSession()` in `src/session-manager.ts`.
+- `engaged_at` is stamped the first time a wiring actually wakes the agent for this session. NULL means the row exists only to hold accumulated context (`ignored_message_policy='accumulate'` writes `trigger=0` rows without a wake). `mention-sticky` reads it via `findEngagedSessionForAgent()`, so ambient backlog can never stand in for a past mention.
 - Creating a session also provisions the session folder and both session DBs via `initSessionFolder()` — see [db-session.md](db-session.md).
 
 ### 1.9 `pending_questions`

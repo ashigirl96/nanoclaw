@@ -65,6 +65,7 @@ function session(
     container_status: 'stopped',
     last_active: null,
     created_at: NOW,
+    engaged_at: null,
   };
 }
 

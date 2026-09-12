@@ -29,6 +29,7 @@ function makeSession(messagingGroupId: string | null = MG_ID): Session {
     container_status: 'stopped',
     last_active: null,
     created_at: NOW,
+    engaged_at: null,
   };
 }
 

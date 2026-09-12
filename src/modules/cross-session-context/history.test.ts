@@ -64,6 +64,7 @@ beforeEach(async () => {
     container_status: 'stopped',
     last_active: null,
     created_at: '2026-08-01T00:00:00.000Z',
+    engaged_at: null,
   });
   initSessionFolder(AG, SESS);
 });

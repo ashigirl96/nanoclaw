@@ -337,6 +337,7 @@ describe('sessions', () => {
     container_status: 'stopped' as const,
     last_active: null,
     created_at: now(),
+    engaged_at: null,
   });
 
   it('should create and retrieve', async () => {
@@ -420,6 +421,7 @@ describe('pending questions', () => {
       container_status: 'stopped',
       last_active: null,
       created_at: now(),
+      engaged_at: null,
     });
   });
 

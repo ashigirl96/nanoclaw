@@ -27,7 +27,7 @@ import {
   getMessagingGroupAgents,
   getMessagingGroupWithAgentCount,
 } from './db/messaging-groups.js';
-import { findSessionForAgent } from './db/sessions.js';
+import { findEngagedSessionForAgent, markSessionEngaged } from './db/sessions.js';
 import { backfillNewSession, fanInboundMessage } from './modules/cross-session-context/index.js';
 import { startTypingRefresh, stopTypingRefresh } from './modules/typing/index.js';
 import { log } from './log.js';
@@ -396,7 +396,7 @@ export async function routeInbound(event: InboundEvent): Promise<void> {
     const scopeOk = engages && (!senderScopeGate || (await senderScopeGate(event, userId, mg, agent)).allowed);
 
     if (engages && accessOk && scopeOk) {
-      await deliverToAgent(agent, agentGroup, mg, event, userId, threadsEnabled, effectiveThreadId, true);
+      const woke = await deliverToAgent(agent, agentGroup, mg, event, userId, threadsEnabled, effectiveThreadId, true);
       engagedCount++;
 
       // Mention-sticky: ask the adapter to subscribe the thread so the
@@ -404,8 +404,11 @@ export async function routeInbound(event: InboundEvent): Promise<void> {
       // requiring another @mention. Uses this wiring's OWN effective thread
       // id — a non-null value already implies the adapter supports threads
       // (resolveThreadPolicy hard-ANDs the capability). DMs, non-threaded
-      // platforms, and thread-opted-out wirings skip.
+      // platforms, and thread-opted-out wirings skip. Gated on `woke`: a
+      // command the gate filtered or denied leaves `engaged_at` unstamped,
+      // so subscribing would forward follow-ups the router then drops.
       if (
+        woke &&
         !subscribed &&
         agent.engage_mode === 'mention-sticky' &&
         adapter?.subscribe &&
@@ -468,11 +471,13 @@ export async function routeInbound(event: InboundEvent): Promise<void> {
  *                      user wants to disambiguate between multiple agents
  *                      wired to one chat, use engage_mode='pattern' with
  *                      the disambiguator as the regex.
- *   'mention-sticky' — platform mention OR an active per-thread session
- *                      already exists for this (agent, mg, thread). The
- *                      session existence IS our subscription state; once
- *                      a thread has engaged us once, follow-ups arrive
- *                      with no mention and should still fire.
+ *   'mention-sticky' — platform mention OR this (agent, mg, thread) has an
+ *                      active session that ALREADY ENGAGED (`engaged_at`).
+ *                      Once a thread has woken us once, follow-ups arrive
+ *                      with no mention and should still fire. Session
+ *                      existence alone is not that signal: an accumulate
+ *                      wiring mints a session for ambient backlog without
+ *                      ever waking the agent (see migration 026).
  */
 async function evaluateEngage(
   agent: MessagingGroupAgent,
@@ -496,10 +501,9 @@ async function evaluateEngage(
       return isMention;
     case 'mention-sticky': {
       if (isMention) return true;
-      // Sticky follow-up: session already exists for this (agent, mg, thread)
-      // — the thread was activated before, keep firing.
+      // Sticky follow-up: this thread already woke us once, keep firing.
       if (mg.is_group === 0) return false; // DMs never use mention-sticky sensibly
-      const existing = await findSessionForAgent(agent.agent_group_id, mg.id, threadId);
+      const existing = await findEngagedSessionForAgent(agent.agent_group_id, mg.id, threadId);
       return existing !== undefined;
     }
     default:
@@ -523,7 +527,7 @@ async function deliverToAgent(
   threadsEnabled: boolean,
   effectiveThreadId: string | null,
   wake: boolean,
-): Promise<void> {
+): Promise<boolean> {
   // Apply the resolved thread policy (wiring override AND channel declaration
   // AND adapter capability — resolveThreadPolicy at fanout): thread-enabled
   // wiring in a group chat → per-thread session regardless of wiring
@@ -561,7 +565,7 @@ async function deliverToAgent(
     const gate = await gateCommand(event.message.content, userId, agent.agent_group_id);
     if (gate.action === 'filter') {
       log.debug('Filtered command dropped by gate', { agentGroupId: agent.agent_group_id });
-      return;
+      return false;
     }
     if (gate.action === 'deny') {
       await writeOutboundDirect(session.agent_group_id, session.id, {
@@ -573,9 +577,16 @@ async function deliverToAgent(
         content: JSON.stringify({ text: `Permission denied: ${gate.command} requires admin access.` }),
       });
       log.info('Admin command denied by gate', { command: gate.command, userId, agentGroupId: agent.agent_group_id });
-      return;
+      return false;
     }
   }
+
+  // Stamp engagement before anything that can fail downstream: the wiring's
+  // decision to wake is already made, and `mention-sticky` follow-ups must
+  // see it even if the spawn itself fails and host-sweep has to retry.
+  // Deliberately below the command gate — a filtered or denied command
+  // returns above and must not subscribe the thread.
+  if (wake) await markSessionEngaged(session.id, new Date().toISOString());
 
   if (wake && created) {
     // New-session backfill (cross-session context): a just-born session is
@@ -663,6 +674,8 @@ async function deliverToAgent(
       if (!woke) stopTypingRefresh(freshSession.id);
     }
   }
+
+  return wake;
 }
 
 /**

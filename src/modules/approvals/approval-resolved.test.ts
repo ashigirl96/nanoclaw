@@ -65,6 +65,7 @@ beforeEach(async () => {
     container_status: 'stopped',
     last_active: now(),
     created_at: now(),
+    engaged_at: null,
   });
   initSessionFolder('ag-1', 'sess-1');
 
