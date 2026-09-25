@@ -62,6 +62,11 @@ vi.mock('./cli/commands/index.js', () => ({}));
 vi.mock('./cli/delivery-action.js', () => ({}));
 vi.mock('./cli/socket-server.js', () => ({ startCliServer: state.ready, stopCliServer: vi.fn() }));
 vi.mock('./log.js', () => ({ log: { info: vi.fn(), error: vi.fn(), warn: vi.fn(), fatal: vi.fn() } }));
+// Fork-local: src/dashboard-pusher.ts is not upstream, so upstream's mock list
+// does not cover it. main() imports it at the tail of startup, where the mocked
+// ./config.js (CENTRAL_DB_PATH only) cannot satisfy its DATA_DIR / ASSISTANT_NAME
+// imports — the throw reached main().catch and exited the worker.
+vi.mock('./dashboard-pusher.js', () => ({ startDashboard: vi.fn() }));
 vi.mock('./channels/channel-registry.js', () => ({
   createChannelDeliveryAdapter: () => ({}),
   teardownChannelAdapters: vi.fn(),
