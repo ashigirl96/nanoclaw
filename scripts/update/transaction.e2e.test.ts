@@ -249,7 +249,8 @@ describe('update-nanoclaw transaction end to end', () => {
     } finally {
       process.env.PATH = previousPath;
     }
-  });
+    // Spawns real detector processes, which blow past the 5s default under full-suite load.
+  }, 30_000);
 
   it('stages through official upstream, gates a migration, completes, and can restore code plus mutable state', async () => {
     const fixture = createForkFixture({ breaking: true });
