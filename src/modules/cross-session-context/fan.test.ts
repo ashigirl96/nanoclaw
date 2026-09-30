@@ -267,7 +267,7 @@ describe('fanInboundMessage', () => {
     expect(readEchoRows('s-dm')).toHaveLength(0);
   });
 
-  it('a room trigger reaches same-mg room thread siblings only — room→DM and room→task are retired', async () => {
+  it('a room trigger fans nowhere — room threads are separate topics, and room→DM / room→task are retired', async () => {
     await addSession(session('s-room-t2', AG, 'mg-room', 'room-thread-2'));
     const written = await fanInboundMessage({
       session: SRC_ROOM,
@@ -278,14 +278,8 @@ describe('fanInboundMessage', () => {
       content: chatContent('hello from the room'),
       timestamp: NOW,
     });
-    expect(written).toBe(1);
-    const rows = readEchoRows('s-room-t2');
-    expect(rows).toHaveLength(1);
-    expect(JSON.parse(rows[0].content as string).echo).toEqual({
-      surface: ECHO_SIBLING_SURFACE,
-      label: 'another conversation in #pixel-room room',
-    });
-    // The retired v1 targets stay silent.
+    expect(written).toBe(0);
+    expect(readEchoRows('s-room-t2')).toHaveLength(0);
     expect(readEchoRows('s-dm')).toHaveLength(0);
     expect(readEchoRows('s-dm-t2')).toHaveLength(0);
     expect(readEchoRows('s-dm2')).toHaveLength(0);
@@ -335,15 +329,19 @@ describe('fanInboundMessage', () => {
   });
 
   it('fans only into the hot set: the K most recently active siblings plus the top-level session', async () => {
-    // 12 room threads; thread i was last active i minutes ago. The source is
-    // the room's top-level session; the audience is the 8 most recently
-    // active OTHER sessions: t-0..t-7.
+    // A busy DM: 12 threads; thread i was last active i minutes ago. The
+    // source is the DM's top-level session; the audience is the 8 most
+    // recently active OTHER sessions: t-0..t-7.
+    const busyDm = mg('mg-dm-busy', 'D-busy', 0, 'Busy');
+    await createMessagingGroup(busyDm);
+    const busyTop = session('s-busy', AG, 'mg-dm-busy', null);
+    await addSession(busyTop);
     for (let i = 0; i < 12; i++) {
-      await addSession(session(`s-room-t${i}`, AG, 'mg-room', `room-thread-${i}`, 'active', minutesAgo(i)));
+      await addSession(session(`s-busy-t${i}`, AG, 'mg-dm-busy', `busy-thread-${i}`, 'active', minutesAgo(i)));
     }
     const written = await fanInboundMessage({
-      session: SRC_ROOM,
-      mg: ROOM_MG,
+      session: busyTop,
+      mg: busyDm,
       messageId: 'msg-bound:ag-1',
       kind: 'chat',
       channelType: 'slack',
@@ -352,15 +350,15 @@ describe('fanInboundMessage', () => {
     });
     expect(written).toBe(HOT_SESSION_LIMIT);
     for (let i = 0; i < 12; i++) {
-      expect(readEchoRows(`s-room-t${i}`), `s-room-t${i}`).toHaveLength(i < HOT_SESSION_LIMIT ? 1 : 0);
+      expect(readEchoRows(`s-busy-t${i}`), `s-busy-t${i}`).toHaveLength(i < HOT_SESSION_LIMIT ? 1 : 0);
     }
 
-    // From a thread, the top-level room session is a target even though 8
+    // From a thread, the top-level session is a target even though 8
     // fresher threads outrank it.
-    await updateSession('s-room', { last_active: minutesAgo(500) });
+    await updateSession('s-busy', { last_active: minutesAgo(500) });
     const fresh = await fanInboundMessage({
-      session: session('s-room-t0', AG, 'mg-room', 'room-thread-0'),
-      mg: ROOM_MG,
+      session: session('s-busy-t0', AG, 'mg-dm-busy', 'busy-thread-0'),
+      mg: busyDm,
       messageId: 'msg-bound-2:ag-1',
       kind: 'chat',
       channelType: 'slack',
@@ -370,7 +368,7 @@ describe('fanInboundMessage', () => {
     // 8 other hot threads + the top-level session, which outranking threads
     // cannot push out.
     expect(fresh).toBe(HOT_SESSION_LIMIT + 1);
-    expect(readEchoRows('s-room')).toHaveLength(1);
+    expect(readEchoRows('s-busy')).toHaveLength(1);
   });
 
   it('skips a target whose mailbox is missing (operator reset) without failing the fan', async () => {
@@ -422,8 +420,8 @@ describe('fanInboundMessage', () => {
 
   it('never fans echo rows, a2a rows, non-chat kinds, or empty text', async () => {
     const base = {
-      session: SRC_ROOM,
-      mg: ROOM_MG,
+      session: SRC_DM,
+      mg: DM_MG,
       messageId: 'msg-4:ag-1',
       content: chatContent('hi'),
       timestamp: NOW,
@@ -435,14 +433,14 @@ describe('fanInboundMessage', () => {
     expect(
       await fanInboundMessage({ ...base, kind: 'chat', channelType: 'slack', content: JSON.stringify({ text: '' }) }),
     ).toBe(0);
-    expect(readEchoRows('s-dm')).toHaveLength(0);
+    expect(readEchoRows('s-dm-t2')).toHaveLength(0);
     expect(readEchoRows('s-task')).toHaveLength(0);
   });
 
   it('never fans from a task session (task sessions are not a source)', async () => {
     const written = await fanInboundMessage({
       session: TASK_SESS,
-      mg: ROOM_MG,
+      mg: DM_MG,
       messageId: 'msg-5:ag-1',
       kind: 'chat',
       channelType: 'slack',
@@ -451,6 +449,7 @@ describe('fanInboundMessage', () => {
     });
     expect(written).toBe(0);
     expect(readEchoRows('s-dm')).toHaveLength(0);
+    expect(readEchoRows('s-dm-t2')).toHaveLength(0);
   });
 });
 
@@ -486,7 +485,7 @@ describe('fanOutboundMessage', () => {
     });
   });
 
-  it('a delivered room reply reaches same-mg room siblings only — never the group DMs or task sessions', async () => {
+  it('a delivered room reply fans nowhere — not the room thread siblings, the group DMs, or task sessions', async () => {
     await addSession(session('s-room-t2', AG, 'mg-room', 'room-thread-2'));
     const written = await fanOutboundMessage(
       {
@@ -499,8 +498,8 @@ describe('fanOutboundMessage', () => {
       SRC_ROOM,
       agentGroup,
     );
-    expect(written).toBe(1);
-    expect(readEchoRows('s-room-t2')).toHaveLength(1);
+    expect(written).toBe(0);
+    expect(readEchoRows('s-room-t2')).toHaveLength(0);
     expect(readEchoRows('s-dm')).toHaveLength(0);
     expect(readEchoRows('s-dm-t2')).toHaveLength(0);
     expect(readEchoRows('s-task')).toHaveLength(0);
@@ -562,17 +561,18 @@ describe('fanOutboundMessage', () => {
 
   it('skips system/task_log/agent/echo/unrouted messages', async () => {
     const content = JSON.stringify({ text: 'x' });
-    const base = { id: 'out-3', platform_id: 'C123', channel_type: 'slack', content };
-    expect(await fanOutboundMessage({ ...base, kind: 'system' }, SRC_ROOM, agentGroup)).toBe(0);
-    expect(await fanOutboundMessage({ ...base, kind: 'task_log' }, SRC_ROOM, agentGroup)).toBe(0);
-    expect(await fanOutboundMessage({ ...base, kind: 'chat', channel_type: 'agent' }, SRC_ROOM, agentGroup)).toBe(0);
+    const base = { id: 'out-3', platform_id: 'D456', channel_type: 'slack', content };
+    expect(await fanOutboundMessage({ ...base, kind: 'system' }, SRC_DM, agentGroup)).toBe(0);
+    expect(await fanOutboundMessage({ ...base, kind: 'task_log' }, SRC_DM, agentGroup)).toBe(0);
+    expect(await fanOutboundMessage({ ...base, kind: 'chat', channel_type: 'agent' }, SRC_DM, agentGroup)).toBe(0);
     expect(
-      await fanOutboundMessage({ ...base, kind: 'chat', channel_type: ECHO_CHANNEL_TYPE }, SRC_ROOM, agentGroup),
+      await fanOutboundMessage({ ...base, kind: 'chat', channel_type: ECHO_CHANNEL_TYPE }, SRC_DM, agentGroup),
     ).toBe(0);
-    expect(await fanOutboundMessage({ ...base, kind: 'chat', platform_id: null }, SRC_ROOM, agentGroup)).toBe(0);
+    expect(await fanOutboundMessage({ ...base, kind: 'chat', platform_id: null }, SRC_DM, agentGroup)).toBe(0);
     // task_log from a task session (series bookkeeping) still never fans.
     expect(await fanOutboundMessage({ ...base, kind: 'task_log' }, TASK_SESS, agentGroup)).toBe(0);
     expect(readEchoRows('s-dm')).toHaveLength(0);
+    expect(readEchoRows('s-dm-t2')).toHaveLength(0);
     expect(readEchoRows('s-task')).toHaveLength(0);
   });
 
