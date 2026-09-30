@@ -4,7 +4,7 @@
  * A just-born session is seeded with its conversation's TOP-LEVEL timeline
  * from the HOT SET — each hot sibling's root user message + top-level agent
  * posts (welcome-style), never the interiors of other threads. DMs seed under
- * the dm-timeline surface, group conversations under channel-timeline. A
+ * the dm-timeline surface; group rooms are never seeded. A
  * long-idle (cold) session catches up the same way, from the point it already
  * knows about; a hot session is left alone. Live-hit this guards against: the
  * user replies to the welcome tour offer, the reply roots a new thread, and
@@ -165,7 +165,7 @@ describe('backfillSession — new session', () => {
     expect(opened).toEqual([]);
   });
 
-  it('seeds group-surface sessions with the channel timeline: channel-timeline surface + channel label', async () => {
+  it('never seeds a group-room session, new or cold — sibling thread roots are other topics', async () => {
     siblings = {
       'sess-room-t1': {
         root: { timestamp: iso(NOW - 50 * 60_000), content: chat('thread root msg') },
@@ -179,13 +179,13 @@ describe('backfillSession — new session', () => {
       created: true,
       now: NOW,
     });
+    await backfillSession(AG, { ...(COLD_SESSION as object), messaging_group_id: 'mg-room' } as never, ROOM_MG, {
+      created: false,
+      now: NOW,
+    });
 
-    expect(written).toHaveLength(2);
-    const first = JSON.parse(written[0]!.content as string) as Record<string, unknown>;
-    expect((first.echo as Record<string, unknown>).surface).toBe('channel-timeline');
-    expect((first.echo as Record<string, unknown>).label).toBe('this channel, just before this conversation');
-    const second = JSON.parse(written[1]!.content as string) as Record<string, unknown>;
-    expect(second.self).toBe(true);
+    expect(written).toHaveLength(0);
+    expect(opened).toEqual([]);
   });
 
   it('ignores system-sender roots and caps at BACKFILL_LIMIT newest rows', async () => {
