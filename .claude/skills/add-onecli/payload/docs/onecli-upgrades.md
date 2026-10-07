@@ -1,6 +1,6 @@
 # Upgrading the OneCLI gateway
 
-NanoClaw talks to the OneCLI gateway (credential vault + egress proxy) through `@onecli-sh/sdk`. The gateway is an external component with its own release line, so NanoClaw pins the **sanctioned gateway version** in the OneCLI skill's [`versions.json`](../.claude/skills/add-onecli/versions.json) under `onecli-gateway` (not the `versions.json` at the project root). When an update moves that pin, the gateway must be upgraded — this doc is the migration path. It is written to be handed to a coding agent verbatim: detect → upgrade → verify → rollback.
+NanoClaw talks to the OneCLI gateway (credential vault + egress proxy) through `@onecli-sh/sdk`. The gateway is an external component with its own release line, so NanoClaw pins the **sanctioned gateway version** in the OneCLI skill's [`.claude/skills/add-onecli/versions.json`](../.claude/skills/add-onecli/versions.json) under `onecli-gateway` (not the `versions.json` at the project root). When an update moves that pin, the gateway must be upgraded — this doc is the migration path. It is written to be handed to a coding agent verbatim: detect → upgrade → verify → rollback.
 
 There is deliberately **no runtime version check, and setup does not migrate the gateway for you**: the gateway is a separate out-of-band component, and the migrator is your coding agent running `/update-nanoclaw`. The update does not detect a pin move on its own. From 2026.10.0 on, release notes that move the `onecli-gateway` pin carry a `[BREAKING]` line, which stops the update until this doc has been followed; earlier pin moves were not marked, so an older gateway can lag behind its pin. The Detect step below shows whether yours does. (Setup detects a pre-`/v1` gateway and points at this doc, but never upgrades it.) Run the steps below verbatim.
 
@@ -31,10 +31,10 @@ The gateway runs as a Docker service in `~/.onecli`. Upgrade just that container
 
 **Local gateway (the common case).** Run these on the gateway's host; for a **remote gateway**, run them on that host (NanoClaw can't reach it over SSH).
 
-Write the pin to `~/.onecli/.env`, which Docker Compose reads on every later `docker compose` command. A version given only on the command line is gone after that command, so the next plain `docker compose up` falls back to an older saved value or to `latest`. This keeps the file's other settings and its permissions, and the temporary copy is private to you:
+Write the pin to `~/.onecli/.env`, which Docker Compose reads on every later `docker compose` command. A version given only on the command line is gone after that command, so the next plain `docker compose up` falls back to an older saved value or to `latest`. This keeps the file's other settings and its permissions, and the temporary copy is private to you. The command stops without touching the file when the value is empty or not a version:
 
 ```bash
-cd ~/.onecli && (umask 077 && P=<onecli-gateway pin from versions.json> && touch .env && { grep -v '^[[:space:]]*ONECLI_VERSION[[:space:]]*=' .env; echo "ONECLI_VERSION=$P"; } > .env.new && cat .env.new > .env && rm .env.new)
+cd ~/.onecli && (umask 077 && P=<onecli-gateway pin from .claude/skills/add-onecli/versions.json> && { printf '%s\n' "$P" | grep -Eqx '[0-9]+\.[0-9]+\.[0-9]+' || { echo "Not saved: '$P' is not a version like 1.42.0" >&2; exit 1; }; } && touch .env && { grep -v '^[[:space:]]*ONECLI_VERSION[[:space:]]*=' .env; echo "ONECLI_VERSION=$P"; } > .env.new && cat .env.new > .env && rm .env.new)
 ```
 
 Check that the compose file actually uses that value. Installers from older lines wrote the tag as a literal (`image: ghcr.io/onecli/onecli:1.36.0`); then `docker compose` re-pulls the *old* tag, prints `Pulled` / `Running`, and the gateway never moves (found by [#3500](https://github.com/nanocoai/nanoclaw/pull/3500)). `env -u` keeps a stray `ONECLI_VERSION` in your shell from overriding the file:
@@ -43,17 +43,27 @@ Check that the compose file actually uses that value. Installers from older line
 cd ~/.onecli && env -u ONECLI_VERSION docker compose config --images | grep onecli/onecli
 ```
 
-This must print `ghcr.io/onecli/onecli:<pin>`. If it shows any other tag, edit the `onecli` service in `~/.onecli/docker-compose.yml` once so it reads the variable, then run the check again:
+This must print `ghcr.io/onecli/onecli:<pin>`. Do not pull or restart until it does: an empty or missing `ONECLI_VERSION` makes the stock compose file use `latest`, which is newer than the pin. If it shows any other tag, edit the `onecli` service in `~/.onecli/docker-compose.yml` once so it reads the variable, then run the check again:
 
 ```yaml
-    image: ghcr.io/onecli/onecli:${ONECLI_VERSION:-<onecli-gateway pin from versions.json>}
+    image: ghcr.io/onecli/onecli:${ONECLI_VERSION:-<onecli-gateway pin from .claude/skills/add-onecli/versions.json>}
 ```
+
+Back up the gateway database before you pull or restart. A newer gateway can migrate it, and going back to the pin does not undo that:
+
+```bash
+cd ~/.onecli && (umask 077 && F=~/onecli-db-backup-$(date +%Y%m%d-%H%M%S).sql && docker compose exec -T postgres sh -c 'pg_dump -U "$POSTGRES_USER" "$POSTGRES_DB"' > "$F.part" && grep -q 'PostgreSQL database dump complete' "$F.part" && mv "$F.part" "$F" || { rm -f "$F.part"; echo "Backup failed, nothing saved" >&2; exit 1; }; ls -l "$F")
+```
+
+It prints the new file only when the dump is complete. If the dump fails or stops early, it says so and leaves no file behind; a leftover file ending in `.part` is not a backup. Only you can read the file. `postgres` is the database service in the stock compose file; use your service's name if it differs. Restoring it was tested once, from 1.45.0 back to 1.42.0: loaded with `psql` into a new, empty database, it brought the gateway back without the startup error and with its stored secret. There is no restore command in this guide yet. Stored secrets are encrypted with a key kept outside the database. By default it is the `secret-encryption-key` file in the `app-data` volume; if you set `SECRET_ENCRYPTION_KEY` yourself, it is wherever you set it. Either way, the dump alone does not recover secrets without that key.
 
 Then pull and restart:
 
 ```bash
 cd ~/.onecli && env -u ONECLI_VERSION docker compose pull onecli && env -u ONECLI_VERSION docker compose up -d
 ```
+
+**If a gateway newer than the pin has started, even briefly:** it can migrate its database, and going back to the pin does not undo that. Put the gateway back on the pin (step 2), then check `docker logs onecli 2>&1 | grep -iE 'migrat|error'`. In testing, rolling back from 1.43.3 worked; from 1.45.0 it left a `policy_rule_identities.agent_group_id does not exist` error at startup. Access rules and approvals were not checked either time. If you see a database error, restore a backup taken before the newer version ran (the one from step 2, if you took it in time). There is no other tested repair, so otherwise [open an issue](https://github.com/nanocoai/nanoclaw/issues) with the log lines.
 
 ## 3. Verify
 
@@ -92,11 +102,10 @@ source setup/lib/install-slug.sh && systemctl --user restart $(systemd_unit)
 
 ## 4. Rollback
 
-Save the old version in `~/.onecli/.env` the same way as in step 2, so a later restart does not undo the rollback, then restart and check the running tag:
+Save the old version in `~/.onecli/.env` the same way as in step 2, so a later restart does not undo the rollback, then restart and check the running tag. The command accepts only a version or `rollback`; if it refuses, nothing restarts. The last line printed must end in `:<old-version>`:
 
 ```bash
-cd ~/.onecli && (umask 077 && P=<old-version> && touch .env && { grep -v '^[[:space:]]*ONECLI_VERSION[[:space:]]*=' .env; echo "ONECLI_VERSION=$P"; } > .env.new && cat .env.new > .env && rm .env.new)
-cd ~/.onecli && env -u ONECLI_VERSION docker compose up -d && docker inspect -f '{{.Config.Image}}' onecli   # must end in :<old-version>
+cd ~/.onecli && (umask 077 && P=<old-version> && { printf '%s\n' "$P" | grep -Eqx '[0-9]+\.[0-9]+\.[0-9]+|rollback' || { echo "Not saved: '$P' is not a version or rollback" >&2; exit 1; }; } && touch .env && { grep -v '^[[:space:]]*ONECLI_VERSION[[:space:]]*=' .env; echo "ONECLI_VERSION=$P"; } > .env.new && cat .env.new > .env && rm .env.new) && env -u ONECLI_VERSION docker compose up -d && docker inspect -f '{{.Config.Image}}' onecli
 ```
 
 If the old gateway ran `:latest`, `latest` now means a different image. Give the image ID you noted in the Detect step a tag first (`docker tag <image-id> ghcr.io/onecli/onecli:rollback`) and use `rollback` as `<old-version>`.
@@ -105,21 +114,21 @@ If the NanoClaw update itself is being rolled back, also pin `@onecli-sh/sdk` ba
 
 ## The CLI binary (`onecli-cli` pin)
 
-The `onecli` host CLI is pinned the same way, under `onecli-cli` in `versions.json`. Setup installs exactly that version by direct release download — it never resolves "latest". When an update moves this pin, replace the binary with the pinned release:
+The `onecli` host CLI is pinned the same way, under `onecli-cli` in `.claude/skills/add-onecli/versions.json`. Setup installs exactly that version by direct release download — it never resolves "latest". When an update moves this pin, replace the binary with the pinned release:
 
 ```bash
 onecli --version                                            # detect: what is installed
-V=<onecli-cli pin from versions.json>
+V=<onecli-cli pin from .claude/skills/add-onecli/versions.json>
 OS=$(uname -s | tr '[:upper:]' '[:lower:]')                 # darwin | linux
 ARCH=$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/')   # amd64 | arm64
 curl -fsSL -o /tmp/onecli.tgz \
   "https://github.com/onecli/onecli-cli/releases/download/v${V}/onecli_${V}_${OS}_${ARCH}.tar.gz"
 tar -xzf /tmp/onecli.tgz -C /tmp
 install -m 0755 /tmp/onecli "$(command -v onecli || echo ~/.local/bin/onecli)"
-onecli --version                                            # verify: must match versions.json
+onecli --version                                            # verify: must match the onecli-cli pin
 ```
 
-To roll back, run the same block after reverting `versions.json` (or checking out the previous NanoClaw version). The CLI is stateless — vault data lives in the gateway, so swapping the binary in either direction loses nothing.
+To roll back, run the same block after reverting `.claude/skills/add-onecli/versions.json` (or checking out the previous NanoClaw version). The CLI is stateless — vault data lives in the gateway, so swapping the binary in either direction loses nothing.
 
 ## Certificate and credential-stub files
 
