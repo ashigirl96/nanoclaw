@@ -93,7 +93,8 @@ Wiring が発言の本文に当てる型。当たった発言を Engage する�
 _Avoid_: trigger, trigger rule
 
 **Sticky Thread**:
-一度 Mention で Engage した Thread。その Session が続く間は、Mention の無い発言も Engage する。
+一度 Mention で Engage した Thread。その Session が続く間は、Mention の無い発言も Engage する。Accumulate だけで Session ができた Thread は Sticky Thread ではない。
+_Avoid_: subscribed thread, mention-sticky
 
 **Per-Chat Session**:
 1 つの Chat に 1 つの Session を割り当てる分け方。
@@ -111,7 +112,7 @@ _Avoid_: shared session
 Wiring ごとに、Agent を Engage できる User を Member・Admin・Owner に絞る設定。
 
 **Accumulate**:
-Wiring が Engage しなかった Chat Message を、Context Message として Session に残すこと。
+Wiring が Engage しなかった Chat Message を、Context Message として Session に残すこと。Session が無ければ作るが、Agent は起こさない。
 _Avoid_: background context, silent context, ambient
 
 **Dropped Message**:
