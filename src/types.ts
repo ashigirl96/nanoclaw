@@ -172,14 +172,6 @@ export interface Session {
   container_status: 'running' | 'idle' | 'stopped';
   last_active: string | null;
   created_at: string;
-  /**
-   * When this session first engaged — i.e. a wiring actually decided to wake
-   * the agent for it. NULL means the session exists only to hold accumulated
-   * context (ignored_message_policy='accumulate' writes trigger=0 rows into a
-   * session the agent was never woken for). `mention-sticky` reads this, so
-   * ambient backlog can never stand in for a real mention.
-   */
-  engaged_at: string | null;
 }
 
 // ── Session DB entities ──

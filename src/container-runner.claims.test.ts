@@ -88,7 +88,6 @@ beforeEach(async () => {
     container_status: 'running',
     last_active: now(),
     created_at: now(),
-    engaged_at: null,
   });
 });
 

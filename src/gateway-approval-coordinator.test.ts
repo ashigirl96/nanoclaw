@@ -114,7 +114,6 @@ beforeEach(async () => {
     container_status: 'running',
     last_active: now,
     created_at: now,
-    engaged_at: null,
   });
 });
 
@@ -262,7 +261,6 @@ describe('gateway approval coordinator', () => {
       container_status: 'running',
       last_active: now,
       created_at: now,
-      engaged_at: null,
     });
     await coordinator.startGatewayApprovalCoordinator(provider(), delivery, vi.fn());
     expect(
@@ -307,7 +305,6 @@ describe('gateway approval coordinator', () => {
       container_status: 'running',
       last_active: now,
       created_at: now,
-      engaged_at: null,
     });
     await coordinator.startGatewayApprovalCoordinator(provider(), delivery, vi.fn(), { timeoutMs: 5_000 });
     const decision = decide(

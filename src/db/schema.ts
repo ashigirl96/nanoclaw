@@ -118,8 +118,7 @@ CREATE TABLE sessions (
   status             TEXT DEFAULT 'active',
   container_status   TEXT DEFAULT 'stopped',
   last_active        TEXT,
-  created_at         TEXT NOT NULL,
-  engaged_at         TEXT
+  created_at         TEXT NOT NULL
 );
 CREATE INDEX idx_sessions_agent_group ON sessions(agent_group_id);
 CREATE INDEX idx_sessions_lookup ON sessions(messaging_group_id, thread_id);

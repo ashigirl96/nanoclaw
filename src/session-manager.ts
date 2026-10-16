@@ -137,7 +137,6 @@ export async function resolveSession(
       container_status: 'stopped',
       last_active: null,
       created_at: new Date().toISOString(),
-      engaged_at: null,
     };
 
     try {
@@ -172,7 +171,6 @@ export async function resolveTaskSession(
     if (existing) return { session: existing, created: false };
 
     const id = generateId();
-    const createdAt = new Date().toISOString();
     const session: Session = {
       id,
       agent_group_id: agentGroupId,
@@ -182,10 +180,7 @@ export async function resolveTaskSession(
       status: 'active',
       container_status: 'stopped',
       last_active: null,
-      created_at: createdAt,
-      // A task session exists only to be run — it has no ambient-context
-      // variant, so it is engaged from birth.
-      engaged_at: createdAt,
+      created_at: new Date().toISOString(),
     };
 
     try {

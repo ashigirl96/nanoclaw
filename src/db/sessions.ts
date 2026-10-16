@@ -7,8 +7,8 @@ export const TASKS_SYSTEM_THREAD_ID = 'system:tasks';
 
 export async function createSession(session: Session): Promise<void> {
   await getDb().run(
-    `INSERT INTO sessions (id, agent_group_id, messaging_group_id, thread_id, agent_provider, status, container_status, last_active, created_at, engaged_at)
-       VALUES (@id, @agent_group_id, @messaging_group_id, @thread_id, @agent_provider, @status, @container_status, @last_active, @created_at, @engaged_at)`,
+    `INSERT INTO sessions (id, agent_group_id, messaging_group_id, thread_id, agent_provider, status, container_status, last_active, created_at)
+       VALUES (@id, @agent_group_id, @messaging_group_id, @thread_id, @agent_provider, @status, @container_status, @last_active, @created_at)`,
     session,
   );
 }
@@ -33,21 +33,6 @@ export async function findSession(messagingGroupId: string, threadId: string | n
   );
 }
 
-async function selectSessionForAgent(
-  agentGroupId: string,
-  messagingGroupId: string,
-  threadId: string | null,
-  extraWhere = '',
-): Promise<Session | undefined> {
-  const threadClause = threadId === null ? 'thread_id IS NULL' : 'thread_id = ?';
-  const params = threadId === null ? [agentGroupId, messagingGroupId] : [agentGroupId, messagingGroupId, threadId];
-  return getDb().get<Session>(
-    `SELECT * FROM sessions
-       WHERE agent_group_id = ? AND messaging_group_id = ? AND ${threadClause} AND status = 'active'${extraWhere}`,
-    ...params,
-  );
-}
-
 /**
  * Session lookup scoped to a specific agent group. Needed when multiple
  * agents are wired to the same messaging group + thread (fan-out) — the
@@ -59,30 +44,19 @@ export async function findSessionForAgent(
   messagingGroupId: string,
   threadId: string | null,
 ): Promise<Session | undefined> {
-  return selectSessionForAgent(agentGroupId, messagingGroupId, threadId);
-}
-
-/**
- * Same lookup, restricted to sessions the agent was actually woken for.
- * A session that only ever accumulated ambient context (trigger=0 rows,
- * no wake) has `engaged_at IS NULL` and is invisible here — see
- * migration 026 and `mention-sticky` in src/router.ts.
- */
-export async function findEngagedSessionForAgent(
-  agentGroupId: string,
-  messagingGroupId: string,
-  threadId: string | null,
-): Promise<Session | undefined> {
-  return selectSessionForAgent(agentGroupId, messagingGroupId, threadId, ' AND engaged_at IS NOT NULL');
-}
-
-/**
- * Stamp first engagement. The `IS NULL` guard keeps the original timestamp
- * and makes this a no-op write on every subsequent engaged message, so the
- * engaged path costs one UPDATE per session rather than one per message.
- */
-export async function markSessionEngaged(id: string, at: string): Promise<void> {
-  await getDb().run('UPDATE sessions SET engaged_at = ? WHERE id = ? AND engaged_at IS NULL', at, id);
+  if (threadId) {
+    return getDb().get<Session>(
+      "SELECT * FROM sessions WHERE agent_group_id = ? AND messaging_group_id = ? AND thread_id = ? AND status = 'active'",
+      agentGroupId,
+      messagingGroupId,
+      threadId,
+    );
+  }
+  return getDb().get<Session>(
+    "SELECT * FROM sessions WHERE agent_group_id = ? AND messaging_group_id = ? AND thread_id IS NULL AND status = 'active'",
+    agentGroupId,
+    messagingGroupId,
+  );
 }
 
 /** Find an active session scoped to an agent group (ignoring messaging group). */

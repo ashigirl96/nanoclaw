@@ -15,9 +15,6 @@
  * group = identical audience, so the sibling fan's privacy argument applies.
  * A hot existing session has been receiving live echoes and is left alone.
  *
- * Group rooms are never seeded: their thread roots are other topics, and
- * placed right before the trigger they read as this thread's own history.
- *
  * Bounded: sources are the ≤ K+1 hot sessions, read concurrently; rows are
  * newer than what the session already has (its newest row) and never older
  * than ECHO_MAX_AGE_DAYS; the newest BACKFILL_LIMIT survive, written in ONE
@@ -28,7 +25,13 @@ import { isTaskThread } from '../../db/sessions.js';
 import { log } from '../../log.js';
 import { withExistingMailboxSession } from '../../session-manager.js';
 import type { AgentGroup, MessagingGroup, Session } from '../../types.js';
-import { ECHO_CHANNEL_TYPE, ECHO_CONCURRENCY, ECHO_MAX_AGE_MS, ECHO_TIMELINE_SURFACE } from './config.js';
+import {
+  ECHO_CHANNEL_TIMELINE_SURFACE,
+  ECHO_CHANNEL_TYPE,
+  ECHO_CONCURRENCY,
+  ECHO_MAX_AGE_MS,
+  ECHO_TIMELINE_SURFACE,
+} from './config.js';
 import { loadHotCandidates, selectEchoTargets, selectHotSessions, truncateEchoText } from './fan.js';
 import { mapConcurrent } from './parallel.js';
 
@@ -116,8 +119,7 @@ export interface BackfillOptions {
  * Seed a waking session with recent top-level context from the hot set of
  * the SAME conversation, when it is new or has been idle long enough to miss
  * live echoes. Call BEFORE the triggering message is written. Non-throwing;
- * no-ops for task sessions, group rooms, hot sessions, and sessions with no
- * hot siblings.
+ * no-ops for task sessions, hot sessions, and sessions with no hot siblings.
  */
 export async function backfillSession(
   agentGroup: AgentGroup,
@@ -127,7 +129,6 @@ export async function backfillSession(
 ): Promise<void> {
   try {
     if (session.thread_id !== null && isTaskThread(session.thread_id)) return;
-    if (mg.is_group === 1) return;
     const now = options.now ?? Date.now();
 
     const candidates = await loadHotCandidates(agentGroup.id, mg.id, now);
@@ -175,9 +176,12 @@ export async function backfillSession(
     const newest = fresh.slice(-BACKFILL_LIMIT);
     if (newest.length === 0) return;
 
+    const isGroupSurface = mg.is_group === 1;
+    const where = isGroupSurface ? 'this channel' : 'this DM';
     const label = options.created
-      ? 'this DM, just before this conversation'
-      : 'this DM, while this conversation was idle';
+      ? `${where}, just before this conversation`
+      : `${where}, while this conversation was idle`;
+    const surface = isGroupSurface ? ECHO_CHANNEL_TIMELINE_SURFACE : ECHO_TIMELINE_SURFACE;
     // One batch id per wake keeps repeated catch-ups of the same session collision-free.
     const batch = new Date(now).toISOString();
     await withExistingMailboxSession(agentGroup.id, session.id, async (mailbox) => {
@@ -197,7 +201,7 @@ export async function backfillSession(
             sender: row.sender,
             senderId: row.senderId,
             ...(row.self ? { self: true } : {}),
-            echo: { surface: ECHO_TIMELINE_SURFACE, label },
+            echo: { surface, label },
           }),
           processAfter: null,
           recurrence: null,

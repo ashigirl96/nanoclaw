@@ -330,8 +330,7 @@ describe('update-nanoclaw transaction end to end', () => {
     } finally {
       process.env.PATH = previousPath;
     }
-    // Spawns real detector processes, which blow past the 5s default under full-suite load.
-  }, 30_000);
+  });
 
   it('refreshes the installed gateway when only its skill payload changed', async () => {
     const fixture = createForkFixture({ gatewayPayloadOnly: true });

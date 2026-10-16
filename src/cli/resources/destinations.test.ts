@@ -81,7 +81,6 @@ describe('destinations CLI custom ops project to inbound.db (#2465)', () => {
         container_status: 'stopped',
         last_active: null,
         created_at: now(),
-        engaged_at: null,
       });
       initSessionFolder(SOURCE, sid);
     }

@@ -21,10 +21,6 @@
  * SOURCE (the series prompt is series-internal); a task's DELIVERED
  * user-facing send fans like any other delivery.
  *
- * Group rooms never fan thread-to-thread: a room's threads are separate
- * topics, and ambient copies of one thread get read as the other's context.
- * A task's or another conversation's post into a room still fans.
- *
  * Bound: within that audience, only the HOT SET receives live echoes — the
  * conversation's HOT_SESSION_LIMIT most recently active sessions (within
  * ECHO_MAX_AGE_DAYS) plus its top-level session. A session outside the hot
@@ -329,7 +325,6 @@ async function fanInbound(args: Parameters<typeof fanInboundMessage>[0]): Promis
     if (args.channelType === 'agent' || args.channelType === ECHO_CHANNEL_TYPE) return 0;
     // Task sessions are never a SOURCE (their traffic is series-internal).
     if (isTaskThread(session.thread_id)) return 0;
-    if (mg.is_group === 1) return 0;
     const parsed = parseContent(args.content);
     if (!parsed.text) return 0;
     // Targets are always sibling threads of the conversation the message
@@ -397,15 +392,13 @@ async function fanOutbound(
           (await getMessagingGroupByPlatform(msg.channel_type, msg.platform_id)));
     if (!mg) return 0;
 
+    const parsed = parseContent(msg.content);
+    if (!parsed.text) return 0;
     // Targets are the sessions of the conversation the message was DELIVERED
     // to. An origin-conversation reply reads as a sibling-thread echo;
     // a message the agent posted INTO this conversation from elsewhere (a
     // task run, or a cross-conversation send) gets the delivered flavor.
-    const isSiblingReply = !isTaskSource && session.messaging_group_id === mg.id;
-    if (isSiblingReply && mg.is_group === 1) return 0;
-
-    const parsed = parseContent(msg.content);
-    if (!parsed.text) return 0;
+    const isOriginSend = session.messaging_group_id === mg.id;
     return await fanEcho({
       agentGroupId: session.agent_group_id,
       sourceSessionId: session.id,
@@ -413,7 +406,8 @@ async function fanOutbound(
       origMessageId: msg.id,
       timestamp: new Date().toISOString(),
       surface: isTaskSource ? ECHO_TASK_SURFACE : ECHO_SIBLING_SURFACE,
-      label: isSiblingReply ? buildSiblingEchoLabel(mg, mg.name) : buildDeliveredEchoLabel(mg, isTaskSource),
+      label:
+        !isTaskSource && isOriginSend ? buildSiblingEchoLabel(mg, mg.name) : buildDeliveredEchoLabel(mg, isTaskSource),
       platformId: mg.platform_id,
       text: parsed.text,
       sender: agentGroup.name,

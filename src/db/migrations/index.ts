@@ -1,7 +1,3 @@
-// Fork-local, not upstream. Kept at the top of the import block so upstream's
-// own additions (which land after the highest-numbered import) never overlap.
-import { localSessionEngagedAt } from './local-session-engaged-at.js';
-
 import type Database from 'better-sqlite3';
 
 import { log } from '../../log.js';
@@ -97,7 +93,6 @@ export const migrations: Migration[] = [
   migration023,
   migration024,
   migration025,
-  localSessionEngagedAt, // fork-local — keep last
 ];
 
 /**

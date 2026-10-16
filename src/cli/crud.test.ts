@@ -220,7 +220,6 @@ describe('genericCreate postCommit hook', () => {
       container_status: 'running',
       last_active: new Date().toISOString(),
       created_at: new Date().toISOString(),
-      engaged_at: null,
     });
 
     const cmd = lookup('wirings-create');
