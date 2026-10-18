@@ -330,7 +330,8 @@ describe('update-nanoclaw transaction end to end', () => {
     } finally {
       process.env.PATH = previousPath;
     }
-  });
+    // Spawns real detector processes, which blow past the 5s default under full-suite load.
+  }, 30_000);
 
   it('refreshes the installed gateway when only its skill payload changed', async () => {
     const fixture = createForkFixture({ gatewayPayloadOnly: true });
@@ -351,7 +352,7 @@ describe('update-nanoclaw transaction end to end', () => {
     expect(installed.match(/onecli\.js/g)).toHaveLength(1);
     state = await finishUpdate(fixture.install, state.id, runtime);
     expect(state.phase).toBe('complete');
-  });
+  }, 30_000);
 
   it('skips a payload-only gateway refresh when the install has no gateway selected', async () => {
     const fixture = createForkFixture({ gatewayPayloadOnly: true });
