@@ -1,4 +1,8 @@
+import { useState } from 'react';
+
 import type { AgentGroupSummary, ChatMessage } from './api';
+import { Avatar } from './Avatar';
+import { InboxIcon, PlusIcon, SearchIcon } from './Icons';
 
 interface Props {
   groups: AgentGroupSummary[];
@@ -11,54 +15,91 @@ interface Props {
 }
 
 export function Sidebar({ groups, selected, inboxSelected, inboxWaiting, onSelect, onSelectInbox, onNewAgent }: Props) {
+  const [searching, setSearching] = useState(false);
+  const [query, setQuery] = useState('');
+  const needle = query.trim().toLowerCase();
+  const shown = needle ? groups.filter((g) => g.name.toLowerCase().includes(needle)) : groups;
+
   return (
     <nav className="sidebar" aria-label="Agent">
-      <div className="sidebar-title">
-        Console
-        <button type="button" className="new-agent-button" aria-label="Agent を作る" onClick={onNewAgent}>
-          +
+      <div className="sidebar-top">
+        <button
+          type="button"
+          className="icon-button"
+          aria-label="Agent を検索"
+          aria-pressed={searching}
+          onClick={() => {
+            setSearching((s) => !s);
+            setQuery('');
+          }}
+        >
+          <SearchIcon />
+        </button>
+        <button type="button" className="icon-button" aria-label="Agent を作る" onClick={onNewAgent}>
+          <PlusIcon />
         </button>
       </div>
+      {searching && (
+        <input
+          className="sidebar-search"
+          type="search"
+          placeholder="Agent を検索"
+          autoFocus
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          onKeyDown={(e) => e.key === 'Escape' && setSearching(false)}
+        />
+      )}
       <ul>
-        <li>
-          <button
-            type="button"
-            className={['group', inboxSelected && 'selected', inboxWaiting > 0 && 'unread'].filter(Boolean).join(' ')}
-            onClick={onSelectInbox}
-          >
-            <span className="group-head">
-              <span className="group-name">Inbox</span>
+        {!needle && (
+          <li>
+            <button
+              type="button"
+              className={['group', inboxSelected && 'selected', inboxWaiting > 0 && 'unread'].filter(Boolean).join(' ')}
+              onClick={onSelectInbox}
+            >
+              <span className="avatar md inbox-avatar" aria-hidden="true">
+                <InboxIcon />
+              </span>
+              <span className="group-text">
+                <span className="group-name">Inbox</span>
+                <span className="group-excerpt">
+                  {inboxWaiting > 0 ? `${inboxWaiting} 件の承認待ち` : '承認を待つものはありません'}
+                </span>
+              </span>
               {inboxWaiting > 0 && (
                 <span className="unread-badge" aria-label={`承認待ち ${inboxWaiting} 件`}>
                   {inboxWaiting}
                 </span>
               )}
-            </span>
-            <span className="group-excerpt">
-              {inboxWaiting > 0 ? `${inboxWaiting} 件の承認待ち` : '承認を待つものはありません'}
-            </span>
-          </button>
-        </li>
-        {groups.map((g) => (
+            </button>
+          </li>
+        )}
+        {shown.map((g) => (
           <li key={g.id}>
             <button
               type="button"
               className={['group', g.id === selected && 'selected', g.unread > 0 && 'unread'].filter(Boolean).join(' ')}
               onClick={() => onSelect(g.id)}
             >
-              <span className="group-head">
+              <Avatar
+                id={g.id}
+                name={g.name}
+                badge={g.activity.working && <span className="working-dot" title="作業中" aria-label="作業中" />}
+              />
+              <span className="group-text">
                 <span className="group-name">{g.name}</span>
-                {g.activity.working && <span className="working-dot" title="作業中" aria-label="作業中" />}
-                {g.unread > 0 && (
-                  <span className="unread-badge" aria-label={`未読 ${g.unread} 件`}>
-                    {g.unread}
-                  </span>
-                )}
+                <span className="group-excerpt">{excerpt(g.lastMessage)}</span>
               </span>
-              <span className="group-excerpt">{excerpt(g.lastMessage)}</span>
+              {g.unread > 0 && (
+                <span className="unread-badge" aria-label={`未読 ${g.unread} 件`}>
+                  {g.unread}
+                </span>
+              )}
             </button>
           </li>
         ))}
+        {needle && shown.length === 0 && <li className="sidebar-none">見つかりません</li>}
       </ul>
     </nav>
   );

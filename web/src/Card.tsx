@@ -42,11 +42,15 @@ function ChoiceCardView({
     }
   }
 
+  const asButtons = card.options.some((o) => o.style && o.style !== 'default');
+
   return (
     <div className={`card ${card.type}`}>
-      {card.title && <div className="card-title">{card.title}</div>}
-      {card.question && <div className="card-body">{card.question}</div>}
-      {card.resolution === null ? (
+      {card.title && <div className="card-eyebrow">{card.title}</div>}
+      {card.question && <div className="card-question">{card.question}</div>}
+      {card.resolution !== null ? (
+        <div className="card-resolution">{card.resolution}</div>
+      ) : asButtons ? (
         <div className="card-actions">
           {card.options.map((o) => (
             <button
@@ -61,7 +65,16 @@ function ChoiceCardView({
           ))}
         </div>
       ) : (
-        <div className="card-resolution">{card.resolution}</div>
+        <ol className="choices">
+          {card.options.map((o, i) => (
+            <li key={o.value}>
+              <button type="button" className="choice" disabled={sending} onClick={() => void pick(o.value)}>
+                <span className="choice-key">{String.fromCharCode(65 + (i % 26))}</span>
+                <span className="choice-label">{o.label}</span>
+              </button>
+            </li>
+          ))}
+        </ol>
       )}
     </div>
   );
@@ -70,7 +83,7 @@ function ChoiceCardView({
 function LinkCardView({ card }: { card: LinkCard }) {
   return (
     <div className="card links">
-      {card.title && <div className="card-title">{card.title}</div>}
+      {card.title && <div className="card-question">{card.title}</div>}
       {card.description && <div className="card-body">{card.description}</div>}
       {card.children.map((text, i) => (
         <div key={i} className="card-body">

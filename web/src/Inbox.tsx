@@ -1,6 +1,6 @@
 import { type ChatMessage } from './api';
-import { CardView } from './Card';
-import { useFormatTime } from './time';
+import { Thread } from './Chat';
+import { InboxIcon } from './Icons';
 
 interface Props {
   messages: ChatMessage[];
@@ -9,22 +9,22 @@ interface Props {
 }
 
 export function Inbox({ messages, onUpdated, onError }: Props) {
-  const formatTime = useFormatTime();
   return (
     <section className="chat">
-      <header className="chat-header">Inbox</header>
-      <div className="messages">
-        {messages.length === 0 && <div className="empty">承認を待つものはありません。</div>}
-        {messages.map((m) => (
-          <article key={m.id} className={`message ${m.role}`}>
-            {m.card ? (
-              <CardView message={{ ...m, card: m.card }} onAnswered={onUpdated} onError={onError} />
-            ) : (
-              m.text && <div className="message-text">{m.text}</div>
-            )}
-            <footer className="message-meta">{formatTime(m.createdAt)}</footer>
-          </article>
-        ))}
+      <div className="chat-scroll">
+        <div className="chat-title">
+          <span className="chat-pill">
+            <span className="avatar sm inbox-avatar" aria-hidden="true">
+              <InboxIcon />
+            </span>
+            Inbox
+          </span>
+        </div>
+        {messages.length === 0 ? (
+          <div className="empty">承認を待つものはありません。</div>
+        ) : (
+          <Thread messages={messages} onAnswered={onUpdated} onError={onError} />
+        )}
       </div>
     </section>
   );

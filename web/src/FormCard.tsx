@@ -29,8 +29,8 @@ export function FormCardView({ messageId, card, onAnswered, onError }: Props) {
 
   return (
     <div className="card form">
-      {card.title && <div className="card-title">{card.title}</div>}
-      {card.question && <div className="card-body">{card.question}</div>}
+      {card.title && <div className="card-eyebrow">{card.title}</div>}
+      {card.question && <div className="card-question">{card.question}</div>}
       {card.resolution === null ? (
         <form className="card-form" onSubmit={(e) => void submit(e)}>
           {card.fields.map((field) => {

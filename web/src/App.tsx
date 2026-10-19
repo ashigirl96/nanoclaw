@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { type AgentGroupSummary, type ChatMessage, type ConsoleEvent, api, awaitsAnswer, subscribe } from './api';
 import { Chat } from './Chat';
+import { PanelIcon } from './Icons';
 import { Inbox } from './Inbox';
 import { NewAgentDialog } from './NewAgentDialog';
 import { announce, isForeground, useForeground, useNotificationPermission } from './notifications';
@@ -25,6 +26,7 @@ export function App() {
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [timezone, setTimezone] = useState<string | undefined>(undefined);
+  const [panelOpen, setPanelOpen] = useState(true);
   const selected = view?.kind === 'chat' ? view.agentGroupId : null;
 
   useEffect(() => {
@@ -107,7 +109,7 @@ export function App() {
 
   return (
     <TimezoneContext.Provider value={timezone}>
-      <div className={current ? 'layout with-panel' : 'layout'}>
+      <div className={current && panelOpen ? 'layout with-panel' : 'layout'}>
         <Sidebar
           groups={groups}
           selected={selected}
@@ -133,12 +135,32 @@ export function App() {
               messages={messages}
               onSent={(m) => setMessages((prev) => upsert(prev, m))}
               onError={setError}
+              headerAction={
+                !panelOpen && (
+                  <button
+                    type="button"
+                    className="icon-button chat-panel-toggle"
+                    aria-label="パネルを開く"
+                    onClick={() => setPanelOpen(true)}
+                  >
+                    <PanelIcon />
+                  </button>
+                )
+              }
             />
           ) : (
             <div className="empty">左の一覧から Agent を選んでください。</div>
           )}
         </main>
-        {current && <Panel key={current.id} agentGroupId={current.id} revision={messages.length} onError={setError} />}
+        {current && panelOpen && (
+          <Panel
+            key={current.id}
+            group={current}
+            revision={messages.length}
+            onClose={() => setPanelOpen(false)}
+            onError={setError}
+          />
+        )}
       </div>
     </TimezoneContext.Provider>
   );

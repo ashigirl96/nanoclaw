@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
 
-import { type AgentGroupDetails, type LibraryFile, type TaskSummary, api } from './api';
+import { type AgentGroupDetails, type AgentGroupSummary, type LibraryFile, type TaskSummary, api } from './api';
+import { Avatar } from './Avatar';
 import { FilePreview } from './FilePreview';
+import { CloseIcon } from './Icons';
 import { useFormatTime } from './time';
 import './panel.css';
 
@@ -9,21 +11,32 @@ type Tab = 'details' | 'library' | 'tasks';
 
 const TABS: Array<{ id: Tab; label: string }> = [
   { id: 'details', label: '詳細' },
-  { id: 'library', label: 'Library' },
+  { id: 'library', label: 'ライブラリ' },
   { id: 'tasks', label: 'Task' },
 ];
 
 interface Props {
-  agentGroupId: string;
+  group: AgentGroupSummary;
   /** Changes whenever the Chat gains a message, so the Library picks up new files. */
   revision: number;
+  onClose: () => void;
   onError: (message: string) => void;
 }
 
-export function Panel({ agentGroupId, revision, onError }: Props) {
-  const [tab, setTab] = useState<Tab>('details');
+export function Panel({ group, revision, onClose, onError }: Props) {
+  const [tab, setTab] = useState<Tab>('library');
+  const agentGroupId = group.id;
   return (
     <aside className="panel" aria-label="Agent の情報">
+      <div className="panel-top">
+        <button type="button" className="icon-button" aria-label="パネルを閉じる" onClick={onClose}>
+          <CloseIcon />
+        </button>
+      </div>
+      <div className="panel-profile">
+        <Avatar id={group.id} name={group.name} size="lg" />
+        <div className="panel-name">{group.name}</div>
+      </div>
       <div className="tabs" role="tablist">
         {TABS.map((t) => (
           <button
@@ -97,7 +110,7 @@ function Library({
   const [open, setOpen] = useState<string | null>(null);
   const formatTime = useFormatTime();
   if (!files) return <p className="panel-note">読み込み中…</p>;
-  if (files.length === 0) return <p className="panel-note">この Agent が届けたファイルはまだありません。</p>;
+  if (files.length === 0) return <p className="panel-note">この Agent が届けたファイルがここに表示されます</p>;
   return (
     <ul className="library">
       {files.map((f) => (
