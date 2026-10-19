@@ -17,7 +17,7 @@ export interface LibraryFile extends StoredFile {
 
 export interface ChatMessage {
   id: string;
-  /** null for the Inbox, which belongs to no Agent Group. */
+  /** null for the Inbox. */
   agentGroupId: string | null;
   role: Role;
   text: string;
@@ -162,7 +162,7 @@ export class ConsoleStore {
     return result.changes > 0 ? this.getMessage(id) : null;
   }
 
-  /** Replaces the card with what `update` returns; null from `update` leaves the message as it is. */
+  /** A null from `update` leaves the message as it is. */
   updateCard(agentGroupId: string | null, id: string, update: (card: Card) => Card | null): ChatMessage | null {
     const message = this.getMessage(id);
     if (!message?.card || message.agentGroupId !== agentGroupId) return null;
@@ -182,7 +182,7 @@ export class ConsoleStore {
     return this.getMessage(id);
   }
 
-  /** Moves the Owner's read position in this Chat up to `messageId`; false when the id is not in this Chat. */
+  /** false when the message is not in this Chat. */
   markRead(agentGroupId: string, messageId: string): boolean {
     const row = this.db
       .prepare('SELECT seq FROM messages WHERE id = ? AND agent_group_id = ?')
@@ -215,7 +215,6 @@ export class ConsoleStore {
     return row ? { id: row.id, name: row.name, mimeType: row.mime_type, data: row.data } : null;
   }
 
-  /** The Agent Group's Library: files its Agent delivered, newest first. */
   listAgentFiles(agentGroupId: string): LibraryFile[] {
     const rows = this.db
       .prepare(

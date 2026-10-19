@@ -8,12 +8,10 @@ const TITLE_PREFIX: Record<Notice['kind'], string> = {
   approval: '承認のお願い: ',
 };
 
-/** The Owner is looking at this tab: it is visible and the window has focus. */
 export function isForeground(): boolean {
   return document.visibilityState === 'visible' && document.hasFocus();
 }
 
-/** Runs `onChange` whenever the tab comes to or leaves the foreground. */
 export function useForeground(onChange: () => void): void {
   useEffect(() => {
     document.addEventListener('visibilitychange', onChange);

@@ -4,7 +4,6 @@ import { resolveQuestionRender } from '../question-render-registry.js';
 import { type Card, type ChoiceCard, answerHeading, choiceCardFrom, linkCardFrom } from './cards.js';
 import { postedCardOf } from './posted-questions.js';
 
-/** The card an Outbound Message carries, if any, plus the text the Chat list shows for it. */
 export async function cardOf(content: Record<string, unknown>): Promise<{ card: Card; text: string } | null> {
   if (content.type === 'ask_question' && typeof content.questionId === 'string') {
     // Only an Agent's Question has a pending_questions row; an Approval Request has none.

@@ -11,7 +11,6 @@ export interface CardOption {
   style?: 'primary' | 'danger' | 'default';
 }
 
-/** An Approval Request or a Question; answered by picking one option. */
 export interface ChoiceCard {
   type: 'approval' | 'question';
   questionId: string;
@@ -36,7 +35,6 @@ export interface FormField {
   options?: string[];
 }
 
-/** A Question that asks for form inputs; its resolution lists the answered values. */
 export interface FormCard {
   type: 'form';
   questionId: string;

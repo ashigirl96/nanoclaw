@@ -13,11 +13,9 @@ export interface TaskSummary {
   lastOccurrence: string | null;
   occurrences: number;
   failedOccurrences: number;
-  /** The newest line of the Task's Run Log. */
   lastResult: string | null;
 }
 
-/** The Agent Group's live Tasks, soonest first: the same rows `ncl tasks list` reads. */
 export async function listTasks(agentGroupId: string): Promise<TaskSummary[]> {
   const tasks: TaskSummary[] = [];
   for (const session of await findTaskSessions(agentGroupId, false)) {

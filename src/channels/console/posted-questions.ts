@@ -41,7 +41,7 @@ function fieldFrom(raw: unknown): FormField[] {
 
 export type FormAnswer = { resolution: string; text: string } | { error: string };
 
-/** Checks the submitted values against the form and words the answer; a missing value counts as left empty. */
+// A missing value counts as left empty.
 export function formAnswerOf(card: FormCard, rawValues: unknown): FormAnswer {
   if (!rawValues || typeof rawValues !== 'object' || Array.isArray(rawValues)) {
     return { error: 'values must be an object keyed by field id' };

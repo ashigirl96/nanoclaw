@@ -1,13 +1,12 @@
 import { normalizeOptions, type NormalizedOption, type RawOption } from '../ask-question.js';
 
-/** An Approval Request for the Approver, or a Question from the Agent; both answered by picking an option. */
 export interface ChoiceCard {
   type: 'approval' | 'question';
   questionId: string;
   title: string;
   question: string;
   options: NormalizedOption[];
-  /** What the card says once it is answered; null while it still takes an answer. */
+  /** null while the card still takes an answer. */
   resolution: string | null;
 }
 
@@ -37,7 +36,6 @@ export function awaitsAnswer(card: Card): card is AnswerableCard {
   return isAnswerable(card) && card.resolution === null;
 }
 
-/** How an Owner Chat Message names the Question it answers. */
 export function answerHeading(card: AnswerableCard): string {
   return `「${[card.title, card.question].filter(Boolean).join(' — ')}」への答え:`;
 }
@@ -48,22 +46,19 @@ export interface FormField {
   id: string;
   label: string;
   type: (typeof FORM_FIELD_TYPES)[number];
-  /** The choices of a select or multi_select field. */
   options?: string[];
 }
 
-/** A Question from post_question that asks for form inputs instead of one pick. */
 export interface FormCard {
   type: 'form';
   questionId: string;
   title: string;
   question: string;
   fields: FormField[];
-  /** The answered values, one `<label>: <value>` line per field; null while it still takes an answer. */
+  /** One `<label>: <value>` line per field; null while the card still takes an answer. */
   resolution: string | null;
 }
 
-/** Reads an ask_question payload; `isQuestion` tells an Agent's Question from an Approval Request. */
 export function choiceCardFrom(content: Record<string, unknown>, isQuestion: boolean): ChoiceCard | null {
   if (content.type !== 'ask_question' || typeof content.questionId !== 'string') return null;
   if (!Array.isArray(content.options)) return null;
@@ -77,7 +72,7 @@ export function choiceCardFrom(content: Record<string, unknown>, isQuestion: boo
   };
 }
 
-/** Reads a send_card payload, keeping only http(s) links since they render as anchors. */
+// Only http(s) links survive, since they render as anchors.
 export function linkCardFrom(content: Record<string, unknown>): LinkCard | null {
   if (content.type !== 'card' || !content.card || typeof content.card !== 'object') return null;
   const spec = content.card as Record<string, unknown>;

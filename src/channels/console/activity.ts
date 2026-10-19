@@ -21,7 +21,6 @@ interface Entry {
   timer: NodeJS.Timeout;
 }
 
-/** Which Agent Groups are working right now, as seen through the Host's setTyping refresh. */
 export class ActivityBoard {
   private readonly entries = new Map<string, Entry>();
 
@@ -70,7 +69,6 @@ export async function currentToolOf(agentGroupId: string, platformId: string): P
   return (await readChatSession(agentGroupId, platformId, (m) => m.getContainerState()?.currentTool)) ?? null;
 }
 
-/** The Agent has claimed messages in the Console Chat's Session and has not finished its turn on them. */
 export async function isMidTurn(agentGroupId: string, platformId: string): Promise<boolean> {
   return (await readChatSession(agentGroupId, platformId, (m) => m.getProcessingClaims().length > 0)) ?? false;
 }

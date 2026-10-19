@@ -56,7 +56,6 @@ const APPROVAL_OPTIONS: RawOption[] = [
 
 const changeListeners = new Set<() => void>();
 
-/** Called whenever "+" adds an Agent Group, including after an approval. */
 export function onAgentGroupsChanged(listener: () => void): () => void {
   changeListeners.add(listener);
   return () => changeListeners.delete(listener);

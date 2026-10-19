@@ -1,7 +1,6 @@
 import { CreateAgentRequestError, createAgentFromConsole, listConsoleTemplates } from './create-agent.js';
 import { HttpError, type Route, ok } from './http.js';
 
-/** The "+" flow: pick a Template and create an Agent Group from it. */
 export const newAgentRoute: Route = async (route, ctx) => {
   if (route === 'GET /api/templates') return ok(listConsoleTemplates());
   if (route !== 'POST /api/agent-groups') return null;

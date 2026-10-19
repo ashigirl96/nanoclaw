@@ -1,8 +1,3 @@
-/**
- * post_question: a Question the Agent does not wait for. The Console renders it
- * as a card and turns the answer into an Owner Chat Message (ADR 0002); every
- * other Platform gets the Question as plain text.
- */
 import { writeMessageOut } from '../db/messages-out.js';
 import { getSessionRouting, resolveDestinationThread } from '../db/session-routing.js';
 import { getCurrentReplyRoute } from '../db/session-state.js';
@@ -100,7 +95,6 @@ function fieldLine(field: Field): string {
   return `- ${field.label}`;
 }
 
-/** The Question as text, for a Platform that has no card to answer it with. */
 function asText(title: string, question: string, answerable: Answerable): string {
   const lines =
     'options' in answerable

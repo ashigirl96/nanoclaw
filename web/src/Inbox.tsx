@@ -8,7 +8,6 @@ interface Props {
   onError: (message: string) => void;
 }
 
-/** The Owner's DM in the Console: Approval Requests and notices that belong to no Agent Group. */
 export function Inbox({ messages, onUpdated, onError }: Props) {
   const formatTime = useFormatTime();
   return (

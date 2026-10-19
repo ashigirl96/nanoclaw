@@ -2,7 +2,6 @@ import { getAgentGroup } from '../../db/agent-groups.js';
 import { HttpError, type Route, ok } from './http.js';
 import { listTasks } from './tasks.js';
 
-/** The right-hand panel of an Agent Group's Chat: its details, Library, and Tasks. */
 export const panelRoute: Route = async (route, ctx) => {
   const match = /^GET \/api\/agent-groups\/([^/]+)(?:\/(library|tasks))?$/.exec(route);
   if (!match) return null;

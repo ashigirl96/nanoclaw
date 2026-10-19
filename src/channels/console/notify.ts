@@ -3,7 +3,6 @@ import { type ConsoleChat, storeKeyOf } from './chat.js';
 
 export type NoticeKind = 'reply' | 'question' | 'approval';
 
-/** What the browser announces when the Console tab is in the background. */
 export interface Notice {
   kind: NoticeKind;
   /** null for the Inbox. */
