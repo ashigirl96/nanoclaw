@@ -15,6 +15,7 @@ import {
   platformIdFor,
 } from './chat.js';
 import { mimeTypeFor } from './mime.js';
+import { panelRoute } from './panel.js';
 import { serveStatic } from './static.js';
 import { type ChatMessage, ConsoleStore, type NewFile } from './store.js';
 
@@ -153,6 +154,9 @@ export function createConsoleAdapter(opts: ConsoleOptions): ConsoleAdapter {
         return sendJson(res, 200, await sendFromOwner(agentGroupId, await readJson(req)));
       }
     }
+
+    const panel = await panelRoute(route, { store: store!, readBody: () => readJson(req) });
+    if (panel) return sendJson(res, panel.status, panel.body);
 
     if (req.method === 'GET' && !url.pathname.startsWith('/api/')) return serveStatic(opts.distDir, url.pathname, res);
 
