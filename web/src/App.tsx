@@ -2,6 +2,8 @@ import { useCallback, useEffect, useState } from 'react';
 
 import { type AgentGroupSummary, type ChatMessage, api, subscribe } from './api';
 import { Chat } from './Chat';
+import { NewAgentDialog } from './NewAgentDialog';
+import { Panel } from './Panel';
 import { Sidebar } from './Sidebar';
 
 function agentGroupIdFromPath(): string | null {
@@ -14,6 +16,7 @@ export function App() {
   const [selected, setSelected] = useState<string | null>(agentGroupIdFromPath);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
 
   useEffect(() => {
     api.agentGroups().then(setGroups, (err: Error) => setError(err.message));
@@ -34,6 +37,10 @@ export function App() {
   useEffect(
     () =>
       subscribe((event) => {
+        if (event.type === 'agent-groups') {
+          api.agentGroups().then(setGroups, (err: Error) => setError(err.message));
+          return;
+        }
         const { message } = event;
         setGroups((prev) => prev.map((g) => (g.id === message.agentGroupId ? withLastMessage(g, message) : g)));
         if (message.agentGroupId !== selected) return;
@@ -49,9 +56,19 @@ export function App() {
 
   const current = groups.find((g) => g.id === selected) ?? null;
 
+  const created = useCallback(
+    async (id: string) => {
+      setCreating(false);
+      setGroups(await api.agentGroups());
+      select(id);
+    },
+    [select],
+  );
+
   return (
-    <div className="layout">
-      <Sidebar groups={groups} selected={selected} onSelect={select} />
+    <div className={current ? 'layout with-panel' : 'layout'}>
+      <Sidebar groups={groups} selected={selected} onSelect={select} onNewAgent={() => setCreating(true)} />
+      {creating && <NewAgentDialog onCreated={(id) => void created(id)} onClose={() => setCreating(false)} />}
       <main className="main">
         {error && (
           <div className="error" role="alert" onClick={() => setError(null)}>
@@ -70,6 +87,7 @@ export function App() {
           <div className="empty">左の一覧から Agent を選んでください。</div>
         )}
       </main>
+      {current && <Panel key={current.id} agentGroupId={current.id} revision={messages.length} onError={setError} />}
     </div>
   );
 }

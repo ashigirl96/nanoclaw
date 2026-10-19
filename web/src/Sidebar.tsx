@@ -4,12 +4,18 @@ interface Props {
   groups: AgentGroupSummary[];
   selected: string | null;
   onSelect: (id: string) => void;
+  onNewAgent: () => void;
 }
 
-export function Sidebar({ groups, selected, onSelect }: Props) {
+export function Sidebar({ groups, selected, onSelect, onNewAgent }: Props) {
   return (
     <nav className="sidebar" aria-label="Agent">
-      <div className="sidebar-title">Console</div>
+      <div className="sidebar-title">
+        Console
+        <button type="button" className="new-agent-button" aria-label="Agent を作る" onClick={onNewAgent}>
+          +
+        </button>
+      </div>
       <ul>
         {groups.map((g) => (
           <li key={g.id}>
