@@ -431,6 +431,25 @@ describe('requests from other sites', () => {
     expect(status).toBe(403);
   });
 
+  it('answers at nanoclaw.localhost, which browsers resolve to loopback without DNS', async () => {
+    await start();
+    const { port } = new URL(adapter!.url());
+
+    const named = await rawRequest({
+      method: 'GET',
+      path: '/api/agent-groups',
+      headers: { host: `nanoclaw.localhost:${port}` },
+    });
+    const other = await rawRequest({
+      method: 'GET',
+      path: '/api/agent-groups',
+      headers: { host: `other.localhost:${port}` },
+    });
+
+    expect(named).toBe(200);
+    expect(other).toBe(403);
+  });
+
   it('serves Agent files in a sandbox so their scripts cannot call the API', async () => {
     const consoleAdapter = await start();
     await consoleAdapter.deliver('web:ag-a', null, {
