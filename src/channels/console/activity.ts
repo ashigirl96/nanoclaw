@@ -1,5 +1,6 @@
 import { getMessagingGroupByPlatform } from '../../db/messaging-groups.js';
 import { findSessionByAgentGroup, findSessionForAgent } from '../../db/sessions.js';
+import type { MailboxSession } from '../../mailbox/index.js';
 import { withExistingMailboxSession } from '../../session-manager.js';
 import { CHANNEL_TYPE } from './chat.js';
 
@@ -12,6 +13,8 @@ export const IDLE: Activity = { working: false, tool: null };
 
 // The typing module re-fires setTyping every 4s while the Agent works, so two missed ticks mean it stopped.
 const WORKING_TTL_MS = 9000;
+// The typing module skips setTyping for 10s after each delivery, and its next tick can come up to 4s after that.
+const DELIVERY_HOLD_MS = 15_000;
 
 interface Entry {
   activity: Activity;
@@ -22,10 +25,7 @@ interface Entry {
 export class ActivityBoard {
   private readonly entries = new Map<string, Entry>();
 
-  constructor(
-    private readonly onChange: (agentGroupId: string, activity: Activity) => void,
-    private readonly ttlMs = WORKING_TTL_MS,
-  ) {}
+  constructor(private readonly onChange: (agentGroupId: string, activity: Activity) => void) {}
 
   get(agentGroupId: string): Activity {
     return this.entries.get(agentGroupId)?.activity ?? IDLE;
@@ -34,11 +34,22 @@ export class ActivityBoard {
   touch(agentGroupId: string, tool: string | null): void {
     const previous = this.entries.get(agentGroupId);
     if (previous) clearTimeout(previous.timer);
-    const timer = setTimeout(() => this.clear(agentGroupId), this.ttlMs);
-    timer.unref();
     const activity = { working: true, tool };
-    this.entries.set(agentGroupId, { activity, timer });
+    this.entries.set(agentGroupId, { activity, timer: this.expireAfter(agentGroupId, WORKING_TTL_MS) });
     if (!previous || previous.activity.tool !== tool) this.onChange(agentGroupId, activity);
+  }
+
+  holdThroughDelivery(agentGroupId: string): void {
+    const entry = this.entries.get(agentGroupId);
+    if (!entry) return;
+    clearTimeout(entry.timer);
+    entry.timer = this.expireAfter(agentGroupId, DELIVERY_HOLD_MS);
+  }
+
+  private expireAfter(agentGroupId: string, ms: number): NodeJS.Timeout {
+    const timer = setTimeout(() => this.clear(agentGroupId), ms);
+    timer.unref();
+    return timer;
   }
 
   clear(agentGroupId: string): void {
@@ -55,16 +66,23 @@ export class ActivityBoard {
   }
 }
 
-/** The tool the Agent is running in the Console Chat's Session, read from the Session's container state. */
 export async function currentToolOf(agentGroupId: string, platformId: string): Promise<string | null> {
+  return (await readChatSession(agentGroupId, platformId, (m) => m.getContainerState()?.currentTool)) ?? null;
+}
+
+/** The Agent has claimed messages in the Console Chat's Session and has not finished its turn on them. */
+export async function isMidTurn(agentGroupId: string, platformId: string): Promise<boolean> {
+  return (await readChatSession(agentGroupId, platformId, (m) => m.getProcessingClaims().length > 0)) ?? false;
+}
+
+async function readChatSession<T>(
+  agentGroupId: string,
+  platformId: string,
+  read: (mailbox: MailboxSession) => T,
+): Promise<T | undefined> {
   const mg = await getMessagingGroupByPlatform(CHANNEL_TYPE, platformId);
   const session =
     (mg && (await findSessionForAgent(agentGroupId, mg.id, null))) ?? (await findSessionByAgentGroup(agentGroupId));
-  if (!session) return null;
-  const tool = await withExistingMailboxSession(
-    agentGroupId,
-    session.id,
-    (mailbox) => mailbox.getContainerState()?.currentTool ?? null,
-  );
-  return tool ?? null;
+  if (!session) return undefined;
+  return withExistingMailboxSession(agentGroupId, session.id, read);
 }

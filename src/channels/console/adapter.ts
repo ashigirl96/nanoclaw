@@ -6,7 +6,7 @@ import { DATA_DIR } from '../../config.js';
 import { getAgentGroup, getAllAgentGroups } from '../../db/agent-groups.js';
 import { log } from '../../log.js';
 import type { ChannelAdapter, ChannelSetup } from '../adapter.js';
-import { type Activity, ActivityBoard, currentToolOf } from './activity.js';
+import { type Activity, ActivityBoard, currentToolOf, isMidTurn } from './activity.js';
 import {
   CHANNEL_TYPE,
   CONSOLE_DEFAULTS,
@@ -344,7 +344,9 @@ export function createConsoleAdapter(opts: ConsoleOptions): ConsoleAdapter {
       broadcast({ type: 'message', message: stored });
       if (agentGroupId !== null) {
         broadcastUnread(agentGroupId);
-        activity.clear(agentGroupId);
+        // The message is already stored, so a failed read must not fail the delivery and get it sent twice.
+        if (await isMidTurn(agentGroupId, platformId).catch(() => false)) activity.holdThroughDelivery(agentGroupId);
+        else activity.clear(agentGroupId);
       }
       return stored.id;
     },

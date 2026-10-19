@@ -31,8 +31,8 @@ afterEach(async () => {
   fs.rmSync(sessionsRoot, { recursive: true, force: true });
 });
 
-/** The Console Chat's Session, with the Agent in the middle of running `tool`. */
-async function runningTool(agentGroupId: string, tool: string): Promise<void> {
+/** The Console Chat's Session with its Mailbox; returns the path of its outbound DB. */
+async function consoleSession(agentGroupId: string): Promise<string> {
   await h.api(`/api/agent-groups/${agentGroupId}/open`, { method: 'POST' });
   const sessionId = `sess-${agentGroupId}`;
   await createSession({
@@ -48,7 +48,12 @@ async function runningTool(agentGroupId: string, tool: string): Promise<void> {
   });
   initSessionFolder(agentGroupId, sessionId);
   await withMailboxSession(agentGroupId, sessionId, () => undefined);
-  const outbound = new Database(outboundDbPath(agentGroupId, sessionId));
+  return outboundDbPath(agentGroupId, sessionId);
+}
+
+/** The Console Chat's Session, with the Agent in the middle of running `tool`. */
+async function runningTool(agentGroupId: string, tool: string): Promise<void> {
+  const outbound = new Database(await consoleSession(agentGroupId));
   outbound
     .prepare(
       `INSERT INTO container_state (id, current_tool, tool_declared_timeout_ms, tool_started_at, updated_at)
@@ -87,6 +92,20 @@ describe('working indicator', () => {
     events.close();
   });
 
+  it('keeps the mark through a message the Agent sends before its turn ends', async () => {
+    const outbound = new Database(await consoleSession('ag-a'));
+    outbound
+      .prepare("INSERT INTO processing_ack (message_id, status, status_changed) VALUES ('in-1', 'processing', ?)")
+      .run(new Date().toISOString());
+    outbound.close();
+    await h.adapter.setTyping!('web:ag-a', null);
+
+    await h.adapter.deliver('web:ag-a', null, { kind: 'chat', content: { text: 'halfway there' } });
+
+    const groups = await h.api<Summary[]>('/api/agent-groups');
+    expect(groups.find((g) => g.id === 'ag-a')!.activity).toEqual({ working: true, tool: null });
+  });
+
   it('drops the mark when the reply arrives', async () => {
     const events = await h.openEvents();
     await h.adapter.setTyping!('web:ag-a', null);
@@ -111,7 +130,7 @@ describe('ActivityBoard', () => {
   it('goes idle once setTyping stops arriving', () => {
     vi.useFakeTimers();
     const changes: unknown[] = [];
-    const board = new ActivityBoard((id, activity) => changes.push([id, activity]), 9000);
+    const board = new ActivityBoard((id, activity) => changes.push([id, activity]));
 
     board.touch('ag-a', null);
     vi.advanceTimersByTime(4000);
@@ -126,5 +145,30 @@ describe('ActivityBoard', () => {
       ['ag-a', { working: true, tool: 'Bash' }],
       ['ag-a', { working: false, tool: null }],
     ]);
+  });
+
+  it('stays working while the Host holds back setTyping after a delivery', () => {
+    vi.useFakeTimers();
+    const board = new ActivityBoard(() => {});
+    board.touch('ag-a', 'Bash');
+
+    board.holdThroughDelivery('ag-a');
+    vi.advanceTimersByTime(14_000);
+    expect(board.get('ag-a')).toEqual({ working: true, tool: 'Bash' });
+    board.touch('ag-a', 'Bash');
+    vi.advanceTimersByTime(8000);
+    expect(board.get('ag-a')).toEqual({ working: true, tool: 'Bash' });
+    vi.advanceTimersByTime(2000);
+
+    expect(board.get('ag-a')).toEqual({ working: false, tool: null });
+  });
+
+  it('does not start a mark when it holds an idle Agent Group', () => {
+    vi.useFakeTimers();
+    const board = new ActivityBoard(() => {});
+
+    board.holdThroughDelivery('ag-a');
+
+    expect(board.get('ag-a')).toEqual({ working: false, tool: null });
   });
 });
