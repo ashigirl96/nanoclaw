@@ -169,3 +169,45 @@ describe('a Question from ask_user_question', () => {
     expect(actions).toEqual([]);
   });
 });
+
+describe('a card from send_card', () => {
+  it('shows its text and web links as link buttons', async () => {
+    await adapter.deliver('web:ag-a', null, {
+      kind: 'chat-sdk',
+      content: {
+        type: 'card',
+        card: {
+          title: 'Release v2',
+          description: 'The release is out.',
+          children: ['3 fixes', { text: '1 feature' }],
+          actions: [
+            { label: 'Changelog', url: 'https://example.com/changelog', style: 'primary' },
+            { label: 'Script', url: 'javascript:alert(1)' },
+            { label: 'Approve', value: 'approve' },
+          ],
+        },
+        fallbackText: 'Release v2 is out',
+      },
+    });
+
+    const [message] = await history();
+    expect(message.text).toBe('Release v2 is out');
+    expect(message.card).toEqual({
+      type: 'links',
+      title: 'Release v2',
+      description: 'The release is out.',
+      children: ['3 fixes', '1 feature'],
+      links: [{ label: 'Changelog', url: 'https://example.com/changelog', style: 'primary' }],
+    });
+  });
+
+  it('takes no answers', async () => {
+    await adapter.deliver('web:ag-a', null, {
+      kind: 'chat-sdk',
+      content: { type: 'card', card: { title: 'Note' } },
+    });
+    const [message] = await history();
+
+    await expect(answer(message.id, 'anything')).rejects.toThrow(/404/);
+  });
+});
