@@ -16,13 +16,15 @@ import {
   platformIdFor,
 } from './chat.js';
 import { mimeTypeFor } from './mime.js';
+import { type Notice, noticeFor } from './notify.js';
 import { serveStatic } from './static.js';
 import { type ChatMessage, ConsoleStore, type NewFile } from './store.js';
 
 type ConsoleEvent =
   | { type: 'message'; message: ChatMessage }
   | { type: 'activity'; agentGroupId: string; activity: Activity }
-  | { type: 'unread'; agentGroupId: string; unread: number };
+  | { type: 'unread'; agentGroupId: string; unread: number }
+  | ({ type: 'notify' } & Notice);
 
 export interface ConsoleOptions {
   port: number;
@@ -230,6 +232,8 @@ export function createConsoleAdapter(opts: ConsoleOptions): ConsoleAdapter {
     async deliver(platformId, _threadId, message): Promise<string | undefined> {
       const agentGroupId = agentGroupIdFrom(platformId);
       if (!store) return undefined;
+      const notice = noticeFor(platformId, message);
+      if (notice) broadcast({ type: 'notify', ...notice });
       if (!agentGroupId) {
         log.warn('Console dropped an Outbound Message for a platform id it has no Chat for', {
           platformId,
