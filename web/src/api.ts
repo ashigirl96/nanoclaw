@@ -100,15 +100,15 @@ export interface LibraryFile extends StoredFile {
   createdAt: string;
 }
 
-export interface Routine {
-  seriesId: string;
+export interface TaskSummary {
+  taskId: string;
   prompt: string;
   status: 'pending' | 'paused';
   schedule: string;
-  nextRun: string | null;
-  lastRun: string | null;
-  runs: number;
-  failedRuns: number;
+  nextOccurrence: string | null;
+  lastOccurrence: string | null;
+  occurrences: number;
+  failedOccurrences: number;
   lastResult: string | null;
 }
 
@@ -149,8 +149,8 @@ export const api = {
     request<AgentGroupDetails>(`/api/agent-groups/${encodeURIComponent(agentGroupId)}`),
   library: (agentGroupId: string) =>
     request<LibraryFile[]>(`/api/agent-groups/${encodeURIComponent(agentGroupId)}/library`),
-  routines: (agentGroupId: string) =>
-    request<Routine[]>(`/api/agent-groups/${encodeURIComponent(agentGroupId)}/routines`),
+  tasks: (agentGroupId: string) =>
+    request<TaskSummary[]>(`/api/agent-groups/${encodeURIComponent(agentGroupId)}/tasks`),
   templates: () => request<Template[]>('/api/templates'),
   createAgent: (template: string, name: string) =>
     request<CreateAgentOutcome>('/api/agent-groups', {

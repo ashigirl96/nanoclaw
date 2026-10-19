@@ -1,6 +1,6 @@
 import { getAgentGroup } from '../../db/agent-groups.js';
 import { CreateAgentRequestError, createAgentFromConsole, listConsoleTemplates } from './create-agent.js';
-import { listRoutines } from './routines.js';
+import { listTasks } from './tasks.js';
 import type { ConsoleStore } from './store.js';
 
 export interface PanelResponse {
@@ -13,9 +13,9 @@ export interface PanelContext {
   readBody: () => Promise<Record<string, unknown>>;
 }
 
-/** The right-hand panel's API (details, Library, Routine) and the "+" flow. Returns null for other routes. */
+/** The right-hand panel's API (details, Library, Task) and the "+" flow. Returns null for other routes. */
 export async function panelRoute(route: string, ctx: PanelContext): Promise<PanelResponse | null> {
-  const perGroup = /^GET \/api\/agent-groups\/([^/]+)(?:\/(library|routines))?$/.exec(route);
+  const perGroup = /^GET \/api\/agent-groups\/([^/]+)(?:\/(library|tasks))?$/.exec(route);
   if (perGroup) {
     const [, rawId, tab] = perGroup;
     const agentGroupId = decodeURIComponent(rawId);
@@ -27,7 +27,7 @@ export async function panelRoute(route: string, ctx: PanelContext): Promise<Pane
         body: { id: group.id, name: group.name, folder: group.folder, createdAt: group.created_at },
       };
     if (tab === 'library') return { status: 200, body: ctx.store.listAgentFiles(agentGroupId) };
-    return { status: 200, body: await listRoutines(agentGroupId) };
+    return { status: 200, body: await listTasks(agentGroupId) };
   }
 
   if (route === 'GET /api/templates') return { status: 200, body: listConsoleTemplates() };

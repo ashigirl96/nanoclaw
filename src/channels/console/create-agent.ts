@@ -43,9 +43,9 @@ export const consoleAgentsCreate = defineGuardedAction({
     return approved.template === input.payload.template && (approved.name ?? null) === input.payload.name;
   },
   decide: async ({ actor }) => {
-    if (actor.kind !== 'human') return DENY('the Console creates Agents only for a person');
+    if (actor.kind !== 'human') return DENY('the Console creates Agent Groups only for a person');
     if ((await isOwner(actor.userId)) || (await isGlobalAdmin(actor.userId))) return ALLOW('Owner or global admin');
-    return HOLD(`${actor.userId} needs an Owner or global admin to create an Agent`);
+    return HOLD(`${actor.userId} needs an Owner or global admin to create an Agent Group`);
   },
 });
 
@@ -98,13 +98,13 @@ async function stamp(request: CreateRequest): Promise<{ id: string; name: string
 
 async function requestApproval(request: CreateRequest): Promise<void> {
   const target = await pickApprovalDelivery(await pickApprover(null), CHANNEL_TYPE);
-  if (!target) throw new Error('no Owner or admin can be reached to approve creating an Agent');
+  if (!target) throw new Error('no Owner or admin can be reached to approve creating an Agent Group');
   const adapter = getDeliveryAdapter();
   if (!adapter) throw new Error('delivery is not running, so the Approval Request cannot be sent');
 
   const approvalId = `appr-console-${randomUUID()}`;
-  const title = 'Create an Agent';
-  const question = `The Console asks to create the Agent "${request.name ?? request.template}" from the Template ${request.template}.`;
+  const title = 'Create an Agent Group';
+  const question = `The Console asks to create the Agent Group "${request.name ?? request.template}" from the Template ${request.template}.`;
   const mg = target.messagingGroup;
   await createPendingApproval({
     approval_id: approvalId,
@@ -135,7 +135,7 @@ async function requestApproval(request: CreateRequest): Promise<void> {
     await deletePendingApproval(approvalId);
     throw err;
   }
-  log.info('Console asked for approval to create an Agent', { approvalId, approver: target.userId });
+  log.info('Console asked for approval to create an Agent Group', { approvalId, approver: target.userId });
 }
 
 async function handleApprovalPress(payload: ResponsePayload): Promise<boolean> {
@@ -170,7 +170,7 @@ async function replayApproved(approval: PendingApproval): Promise<void> {
     grant: approval,
   });
   if (decision.effect !== 'allow') {
-    log.warn('Guard refused the approved Console Agent creation', { reason: decision.reason });
+    log.warn('Guard refused the approved Console Agent Group creation', { reason: decision.reason });
     return;
   }
   await stamp(request);

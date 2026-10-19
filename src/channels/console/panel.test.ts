@@ -148,20 +148,20 @@ describe('Library', () => {
   });
 });
 
-interface Routine {
-  seriesId: string;
+interface TaskSummary {
+  taskId: string;
   prompt: string;
   status: string;
   schedule: string;
-  nextRun: string;
-  lastRun: string | null;
-  runs: number;
-  failedRuns: number;
+  nextOccurrence: string;
+  lastOccurrence: string | null;
+  occurrences: number;
+  failedOccurrences: number;
   lastResult: string | null;
 }
 
-describe('Routine', () => {
-  it("lists the Agent Group's Tasks with their schedule, next run, and last result", async () => {
+describe('Task', () => {
+  it("lists the Agent Group's Tasks with their schedule, next Occurrence, and last result", async () => {
     const daily = await createScheduledTask(
       'ag-a',
       prepareScheduledTask({
@@ -183,25 +183,25 @@ describe('Routine', () => {
     await appendRunLog('ag-a', daily.row.id, 'sent the briefing to #general');
     await start();
 
-    const routines = await api<Routine[]>('/api/agent-groups/ag-a/routines');
+    const tasks = await api<TaskSummary[]>('/api/agent-groups/ag-a/tasks');
 
-    expect(routines).toEqual([
+    expect(tasks).toEqual([
       {
-        seriesId: daily.row.id,
+        taskId: daily.row.id,
         prompt: 'Send the morning briefing.',
         status: 'pending',
         schedule: '0 9 * * *',
-        nextRun: daily.row.processAfter,
-        lastRun: null,
-        runs: 0,
-        failedRuns: 0,
+        nextOccurrence: daily.row.processAfter,
+        lastOccurrence: null,
+        occurrences: 0,
+        failedOccurrences: 0,
         lastResult: expect.stringContaining('sent the briefing to #general'),
       },
       expect.objectContaining({
         prompt: 'Remind me once.',
         status: 'paused',
         schedule: 'once',
-        nextRun: '2099-01-01T00:00:00.000Z',
+        nextOccurrence: '2099-01-01T00:00:00.000Z',
         lastResult: null,
       }),
     ]);
@@ -210,7 +210,7 @@ describe('Routine', () => {
   it('offers no way to change a Task', async () => {
     await start();
 
-    const res = await call('/api/agent-groups/ag-a/routines', { method: 'POST', body: '{}' });
+    const res = await call('/api/agent-groups/ag-a/tasks', { method: 'POST', body: '{}' });
 
     expect(res.status).toBe(404);
   });

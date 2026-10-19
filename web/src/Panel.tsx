@@ -1,15 +1,15 @@
 import { useEffect, useState } from 'react';
 
-import { type AgentGroupDetails, type LibraryFile, type Routine, api } from './api';
+import { type AgentGroupDetails, type LibraryFile, type TaskSummary, api } from './api';
 import { FilePreview } from './FilePreview';
 import './panel.css';
 
-type Tab = 'details' | 'library' | 'routines';
+type Tab = 'details' | 'library' | 'tasks';
 
 const TABS: Array<{ id: Tab; label: string }> = [
   { id: 'details', label: '詳細' },
   { id: 'library', label: 'Library' },
-  { id: 'routines', label: 'Routine' },
+  { id: 'tasks', label: 'Task' },
 ];
 
 interface Props {
@@ -40,7 +40,7 @@ export function Panel({ agentGroupId, revision, onError }: Props) {
       <div className="panel-body" role="tabpanel">
         {tab === 'details' && <Details agentGroupId={agentGroupId} onError={onError} />}
         {tab === 'library' && <Library agentGroupId={agentGroupId} revision={revision} onError={onError} />}
-        {tab === 'routines' && <Routines agentGroupId={agentGroupId} onError={onError} />}
+        {tab === 'tasks' && <Tasks agentGroupId={agentGroupId} onError={onError} />}
       </div>
     </aside>
   );
@@ -110,33 +110,33 @@ function Library({
   );
 }
 
-function Routines({ agentGroupId, onError }: { agentGroupId: string; onError: (m: string) => void }) {
-  const routines = useLoad<Routine[]>(() => api.routines(agentGroupId), [agentGroupId], onError);
-  if (!routines) return <p className="panel-note">読み込み中…</p>;
-  if (routines.length === 0) return <p className="panel-note">この Agent の Task はありません。</p>;
+function Tasks({ agentGroupId, onError }: { agentGroupId: string; onError: (m: string) => void }) {
+  const tasks = useLoad<TaskSummary[]>(() => api.tasks(agentGroupId), [agentGroupId], onError);
+  if (!tasks) return <p className="panel-note">読み込み中…</p>;
+  if (tasks.length === 0) return <p className="panel-note">この Agent の Task はありません。</p>;
   return (
-    <ul className="routines">
-      {routines.map((r) => (
-        <li key={r.seriesId} className="routine">
-          <div className="routine-prompt">{r.prompt}</div>
-          <dl className="routine-facts">
+    <ul className="tasks">
+      {tasks.map((t) => (
+        <li key={t.taskId} className="task">
+          <div className="task-prompt">{t.prompt}</div>
+          <dl className="task-facts">
             <dt>予定</dt>
             <dd>
-              <code>{r.schedule === 'once' ? '1 回だけ' : r.schedule}</code>
-              {r.status === 'paused' && <span className="badge">停止中</span>}
+              <code>{t.schedule === 'once' ? '1 回だけ' : t.schedule}</code>
+              {t.status === 'paused' && <span className="badge">停止中</span>}
             </dd>
             <dt>次回</dt>
-            <dd>{r.nextRun ? new Date(r.nextRun).toLocaleString() : '—'}</dd>
+            <dd>{t.nextOccurrence ? new Date(t.nextOccurrence).toLocaleString() : '—'}</dd>
             <dt>最後</dt>
             <dd>
-              {r.lastRun ? new Date(r.lastRun).toLocaleString() : 'まだ動いていません'}
-              {r.runs > 0 && `（${r.runs} 回）`}
-              {r.failedRuns > 0 && <span className="badge danger">失敗 {r.failedRuns}</span>}
+              {t.lastOccurrence ? new Date(t.lastOccurrence).toLocaleString() : 'まだ動いていません'}
+              {t.occurrences > 0 && `（${t.occurrences} 回）`}
+              {t.failedOccurrences > 0 && <span className="badge danger">失敗 {t.failedOccurrences}</span>}
             </dd>
-            {r.lastResult && (
+            {t.lastResult && (
               <>
                 <dt>結果</dt>
-                <dd className="routine-result">{r.lastResult}</dd>
+                <dd className="task-result">{t.lastResult}</dd>
               </>
             )}
           </dl>
