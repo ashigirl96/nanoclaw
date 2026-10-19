@@ -84,6 +84,19 @@ afterEach(async () => {
   fs.rmSync(ROOT, { recursive: true, force: true });
 });
 
+describe('details', () => {
+  it('describes the Agent Group', async () => {
+    await start();
+
+    expect(await api('/api/agent-groups/ag-a')).toEqual({
+      id: 'ag-a',
+      name: 'Alice',
+      folder: 'alice',
+      createdAt: '2026-10-01T00:00:00.000Z',
+    });
+  });
+});
+
 interface LibraryItem {
   id: string;
   name: string;
