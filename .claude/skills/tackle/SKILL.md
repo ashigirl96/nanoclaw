@@ -8,7 +8,7 @@ spec または ticket でユーザーが記述した作業を、実装から mer
 
 ## 1. branch を切る
 
-作業は `issue-<番号>` の branch で行う。今の branch の名前が違えば、`git fetch origin main` してから `git switch --no-track -c issue-<番号> origin/main` で切る。worktree は前の ticket の branch のまま渡されることがあり、その branch は origin/main に無い commit を残しているため。切ったら `pnpm install --frozen-lockfile` と、`container/agent-runner` で `bun install --frozen-lockfile` を流す。worktree には依存が入っていないことがあるため。
+作業は `issue-<番号>` の branch で行う。今の branch の名前が違えば、`git fetch origin main` してから `git switch --no-track -c issue-<番号> origin/main` で切る。worktree は前の ticket の branch のまま渡されることがあり、その branch は origin/main に無い commit を残しているため。前の session の作業は `origin/issue-<番号>` か、branch に載らない `salvage: … issue-<番号> …` の commit（`git log --all --oneline --grep 'issue-<番号>'`）に残っていることがあるので、あれば branch に merge するか cherry-pick してから始める。切ったら `pnpm install --frozen-lockfile` と、`container/agent-runner` で `bun install --frozen-lockfile` を流す。worktree には依存が入っていないことがあるため。
 
 ## 2. 実装する
 

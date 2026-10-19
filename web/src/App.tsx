@@ -2,6 +2,7 @@ import { type CSSProperties, useCallback, useEffect, useRef, useState } from 're
 
 import { type AgentGroupSummary, type ChatMessage, type ConsoleEvent, api, awaitsAnswer, subscribe } from './api';
 import { Chat } from './Chat';
+import { ConnectedAccounts } from './ConnectedAccounts';
 import { PanelIcon } from './Icons';
 import { Inbox } from './Inbox';
 import { NewAgentDialog } from './NewAgentDialog';
@@ -11,13 +12,14 @@ import { ResizeHandle, useStoredWidth } from './Resizer';
 import { Sidebar } from './Sidebar';
 import { TimezoneContext } from './time';
 
-type View = { kind: 'inbox' } | { kind: 'chat'; agentGroupId: string } | null;
+type View = { kind: 'inbox' } | { kind: 'accounts' } | { kind: 'chat'; agentGroupId: string } | null;
 
 const SIDEBAR_WIDTH = { initial: 264, min: 200, max: 480 };
 const PANEL_WIDTH = { initial: 320, min: 260, max: 600 };
 
 function viewFromPath(): View {
   if (window.location.pathname === '/inbox') return { kind: 'inbox' };
+  if (window.location.pathname === '/accounts') return { kind: 'accounts' };
   const match = /^\/chat\/([^/]+)$/.exec(window.location.pathname);
   return match ? { kind: 'chat', agentGroupId: decodeURIComponent(match[1]) } : null;
 }
@@ -30,6 +32,7 @@ export function App() {
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [timezone, setTimezone] = useState<string | undefined>(undefined);
+  const [hasConnectedAccounts, setHasConnectedAccounts] = useState(false);
   const [panelOpen, setPanelOpen] = useState(true);
   const [sidebarWidth, setSidebarWidth] = useStoredWidth('console.sidebarWidth', SIDEBAR_WIDTH);
   const [panelWidth, setPanelWidth] = useStoredWidth('console.panelWidth', PANEL_WIDTH);
@@ -39,7 +42,10 @@ export function App() {
     api.agentGroups().then(setGroups, (err: Error) => setError(err.message));
     api.inbox().then(setInbox, (err: Error) => setError(err.message));
     api.settings().then(
-      (s) => setTimezone(s.timezone),
+      (s) => {
+        setTimezone(s.timezone);
+        setHasConnectedAccounts(s.connectedAccounts);
+      },
       (err: Error) => setError(err.message),
     );
     const onPop = () => setView(viewFromPath());
@@ -61,7 +67,7 @@ export function App() {
   }, [selected]);
 
   const navigate = useCallback((next: Exclude<View, null>) => {
-    const path = next.kind === 'inbox' ? '/inbox' : `/chat/${encodeURIComponent(next.agentGroupId)}`;
+    const path = next.kind === 'chat' ? `/chat/${encodeURIComponent(next.agentGroupId)}` : `/${next.kind}`;
     window.history.pushState(null, '', path);
     setView(next);
   }, []);
@@ -130,8 +136,11 @@ export function App() {
           selected={selected}
           inboxSelected={view?.kind === 'inbox'}
           inboxWaiting={waiting}
+          accountsVisible={hasConnectedAccounts}
+          accountsSelected={view?.kind === 'accounts'}
           onSelect={(id) => navigate({ kind: 'chat', agentGroupId: id })}
           onSelectInbox={() => navigate({ kind: 'inbox' })}
+          onSelectAccounts={() => navigate({ kind: 'accounts' })}
           onNewAgent={() => setCreating(true)}
         />
         <ResizeHandle
@@ -150,6 +159,8 @@ export function App() {
           )}
           {view?.kind === 'inbox' ? (
             <Inbox messages={inbox} onUpdated={(m) => setInbox((prev) => upsert(prev, m))} onError={setError} />
+          ) : view?.kind === 'accounts' && hasConnectedAccounts ? (
+            <ConnectedAccounts />
           ) : current ? (
             <Chat
               key={current.id}
@@ -177,7 +188,13 @@ export function App() {
           )}
         </main>
         {current && panelOpen && (
-          <ResizeHandle edge="left" label="パネルの幅" width={panelWidth} bounds={PANEL_WIDTH} onResize={setPanelWidth} />
+          <ResizeHandle
+            edge="left"
+            label="パネルの幅"
+            width={panelWidth}
+            bounds={PANEL_WIDTH}
+            onResize={setPanelWidth}
+          />
         )}
         {current && panelOpen && (
           <Panel

@@ -5,7 +5,7 @@ import path from 'path';
 import type { ChannelSetup } from '../adapter.js';
 import { closeDb, initTestDb, runMigrations } from '../../db/index.js';
 import { createAgentGroup } from '../../db/agent-groups.js';
-import { createConsoleAdapter, type ConsoleAdapter } from './adapter.js';
+import { createConsoleAdapter, type ConsoleAdapter, type ConsoleOptions } from './adapter.js';
 
 export interface Harness {
   adapter: ConsoleAdapter;
@@ -32,7 +32,7 @@ const silentSetup: ChannelSetup = {
 };
 
 /** A fresh central DB with Agent Groups ag-a (Alice) and ag-b (Bob), and a running Console. */
-export async function startConsole(): Promise<Harness> {
+export async function startConsole(opts: Pick<ConsoleOptions, 'onecli'> = {}): Promise<Harness> {
   tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'console-test-'));
   const db = await initTestDb();
   await runMigrations(db);
@@ -52,7 +52,7 @@ export async function startConsole(): Promise<Harness> {
   });
 
   async function boot(): Promise<void> {
-    current = createConsoleAdapter({ port: 0, dataDir: tmp!, distDir: path.join(tmp!, 'dist') });
+    current = createConsoleAdapter({ port: 0, dataDir: tmp!, distDir: path.join(tmp!, 'dist'), ...opts });
     await current.setup(silentSetup);
   }
   await boot();

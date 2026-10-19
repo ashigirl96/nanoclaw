@@ -19,6 +19,7 @@ import {
   platformIdFor,
   storeKeyOf,
 } from './chat.js';
+import { type OnecliEndpoint, connectedAccountsRoute, onecliEndpointFromEnv } from './connected-accounts.js';
 import { onAgentGroupsChanged } from './create-agent.js';
 import {
   type ConsoleEvent,
@@ -44,13 +45,13 @@ export interface ConsoleOptions {
   port: number;
   dataDir: string;
   distDir: string;
+  /** Set only when the Install's Gateway is OneCLI. */
+  onecli?: OnecliEndpoint | null;
 }
 
 export interface ConsoleAdapter extends ChannelAdapter {
   url(): string;
 }
-
-const ROUTES: Route[] = [answersRoute, inboxRoute, readRoute, panelRoute, newAgentRoute, settingsRoute];
 
 export function consoleAdapterFromEnv(env: Record<string, string | undefined>): ConsoleAdapter | null {
   if (!env.CONSOLE_PORT) return null;
@@ -59,10 +60,25 @@ export function consoleAdapterFromEnv(env: Record<string, string | undefined>): 
     log.warn('Console disabled: CONSOLE_PORT is not a valid port', { CONSOLE_PORT: env.CONSOLE_PORT });
     return null;
   }
-  return createConsoleAdapter({ port, dataDir: DATA_DIR, distDir: path.resolve(process.cwd(), 'web', 'dist') });
+  return createConsoleAdapter({
+    port,
+    dataDir: DATA_DIR,
+    distDir: path.resolve(process.cwd(), 'web', 'dist'),
+    onecli: onecliEndpointFromEnv(env),
+  });
 }
 
 export function createConsoleAdapter(opts: ConsoleOptions): ConsoleAdapter {
+  const onecli = opts.onecli ?? null;
+  const routes: Route[] = [
+    answersRoute,
+    inboxRoute,
+    readRoute,
+    panelRoute,
+    newAgentRoute,
+    settingsRoute({ connectedAccounts: onecli !== null }),
+    connectedAccountsRoute(onecli),
+  ];
   let server: http.Server | null = null;
   let store: ConsoleStore | null = null;
   let setupConfig: ChannelSetup | null = null;
@@ -177,7 +193,7 @@ export function createConsoleAdapter(opts: ConsoleOptions): ConsoleAdapter {
       sendFromOwner,
       onAction: (...args) => setupConfig!.onAction(...args),
     };
-    for (const answerRoute of ROUTES) {
+    for (const answerRoute of routes) {
       const response = await answerRoute(route, ctx);
       if (response) return sendJson(res, response.status, response.body);
     }
