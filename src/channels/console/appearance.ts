@@ -12,9 +12,7 @@ export interface AppearanceSummary {
 
 export function appearanceOf(store: ConsoleStore, agentGroupId: string): AppearanceSummary {
   const { label, avatar } = store.getAppearance(agentGroupId);
-  const avatarUrl = avatar
-    ? `/api/agent-groups/${encodeURIComponent(agentGroupId)}/avatar?v=${encodeURIComponent(avatar.updatedAt)}`
-    : null;
+  const avatarUrl = avatar ? `/api/agent-groups/${encodeURIComponent(agentGroupId)}/avatar?v=${avatar.version}` : null;
   return { label, avatarUrl };
 }
 
@@ -49,8 +47,8 @@ export const appearanceRoute: Route = async (route, ctx) => {
 
 function parseLabel(raw: unknown): string | null {
   if (typeof raw !== 'string') throw new HttpError(400, 'label must be a string');
+  if (/[\r\n]/.test(raw)) throw new HttpError(400, 'label must be a single line');
   const label = raw.trim();
-  if (/[\r\n]/.test(label)) throw new HttpError(400, 'label must be a single line');
   if ([...label].length > MAX_LABEL_CHARS)
     throw new HttpError(400, `label must be ${MAX_LABEL_CHARS} characters or fewer`);
   return label || null;

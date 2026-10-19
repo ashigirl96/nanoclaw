@@ -1,10 +1,10 @@
 import { getMessagingGroupAgentByPair, getMessagingGroupsByAgentGroup } from '../../db/messaging-groups.js';
 import { readEnvFile } from '../../env.js';
 import { log } from '../../log.js';
-import { botTokenKeyForInstance, slackAuthTest } from '../slack-lib.js';
 import { toAvatarImage } from './avatar-image.js';
 import type { ConsoleStore, Image } from './store.js';
 
+// The Console does not import the Slack channel, which an install may not have or may remove.
 const SLACK_API = 'https://slack.com/api';
 const CLASSIC_INSTANCE = 'slack';
 
@@ -68,27 +68,36 @@ async function ownSlackInstanceOf(agentGroupId: string): Promise<string | null> 
 }
 
 async function fetchBotImage(instance: string): Promise<Image> {
-  const tokenKey = botTokenKeyForInstance(instance);
+  const tokenKey = botTokenKeyOf(instance);
   const token = readEnvFile([tokenKey])[tokenKey];
   if (!token) throw new Error(`${tokenKey} is not set in .env`);
-  const { userId } = await slackAuthTest(token, 'console-avatar');
-  const info = await usersInfo(token, userId);
+  const auth = await slackRead(token, 'auth.test', {});
+  if (typeof auth.user_id !== 'string') throw new Error('slack auth.test failed: no user_id in response');
+  const info = await slackRead(token, 'users.info', { user: auth.user_id });
   const profile = (info.user as { profile?: Record<string, unknown> } | undefined)?.profile ?? {};
   const url = [profile.image_512, profile.image_192, profile.image_72].find((u) => typeof u === 'string');
   if (typeof url !== 'string') throw new Error('slack users.info returned no profile image');
   return downloadImage(url);
 }
 
-// users.info ignores JSON arguments, so it goes form-encoded instead of through slackCall.
-async function usersInfo(token: string, user: string): Promise<Record<string, unknown>> {
-  const res = await fetch(`${SLACK_API}/users.info`, {
+/** The .env key the Slack channel reads a named instance's bot token from: `slack-my-bot` → `SLACK_BOT_TOKEN_MY_BOT`. */
+function botTokenKeyOf(instance: string): string {
+  return `SLACK_BOT_TOKEN_${instance
+    .replace(/^slack-/, '')
+    .toUpperCase()
+    .replace(/-/g, '_')}`;
+}
+
+// Slack's read methods ignore JSON arguments, so these go form-encoded.
+async function slackRead(token: string, method: string, params: Record<string, string>) {
+  const res = await fetch(`${SLACK_API}/${method}`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({ user }).toString(),
+    body: new URLSearchParams(params).toString(),
     signal: AbortSignal.timeout(30_000),
   });
   const json = (await res.json().catch(() => ({}))) as Record<string, unknown>;
-  if (json.ok !== true) throw new Error(`slack users.info failed: ${String(json.error ?? `HTTP ${res.status}`)}`);
+  if (json.ok !== true) throw new Error(`slack ${method} failed: ${String(json.error ?? `HTTP ${res.status}`)}`);
   return json;
 }
 

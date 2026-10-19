@@ -60,6 +60,11 @@ describe('label', () => {
     expect((await summaryOf('ag-a')).label).toBeNull();
   });
 
+  it('rejects a line break, even at the edge', async () => {
+    expect((await send('/api/agent-groups/ag-a/label', { label: '経理\n' })).status).toBe(400);
+    expect((await summaryOf('ag-a')).label).toBeNull();
+  });
+
   it('accepts 40 characters and rejects 41', async () => {
     expect((await send('/api/agent-groups/ag-a/label', { label: 'あ'.repeat(40) })).status).toBe(200);
     const res = await send('/api/agent-groups/ag-a/label', { label: 'あ'.repeat(41) });
@@ -119,7 +124,6 @@ describe('uploaded avatar', () => {
   it('gets a new URL when replaced, so browsers do not keep the old image', async () => {
     await upload('ag-a', PNG);
     const first = (await summaryOf('ag-a')).avatarUrl;
-    await new Promise((r) => setTimeout(r, 5));
     await upload('ag-a', JPEG);
     expect((await summaryOf('ag-a')).avatarUrl).not.toBe(first);
     expect((await avatarOf('ag-a'))?.body).toEqual(JPEG);
