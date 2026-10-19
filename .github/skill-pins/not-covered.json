@@ -84,6 +84,12 @@
       "kind": "version",
       "source": ".claude/skills/add-onecli/versions.json",
       "why": "read by the skill's own scripts; Dependabot does not read versions.json"
+    },
+    {
+      "pin": "@total-typescript/shoehorn",
+      "kind": "unpinned npm install",
+      "source": ".claude/skills/migrate-to-shoehorn/SKILL.md",
+      "why": "installs whatever version is newest; pin an exact version so it can be tracked"
     }
   ]
 }
