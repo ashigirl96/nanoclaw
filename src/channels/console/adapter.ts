@@ -6,15 +6,9 @@ import { DATA_DIR } from '../../config.js';
 import { getAgentGroup, getAllAgentGroups } from '../../db/agent-groups.js';
 import { log } from '../../log.js';
 import type { ChannelAdapter, ChannelSetup } from '../adapter.js';
-import {
-  CHANNEL_TYPE,
-  CONSOLE_DEFAULTS,
-  OWNER_USER_ID,
-  agentGroupIdFrom,
-  ensureConsoleChat,
-  platformIdFor,
-} from './chat.js';
+import { CHANNEL_TYPE, CONSOLE_DEFAULTS, OWNER_USER_ID, chatOf, ensureConsoleChat, platformIdFor } from './chat.js';
 import { mimeTypeFor } from './mime.js';
+import { cardOf } from './questions.js';
 import { serveStatic } from './static.js';
 import { type ChatMessage, ConsoleStore, type NewFile } from './store.js';
 
@@ -123,6 +117,8 @@ export function createConsoleAdapter(opts: ConsoleOptions): ConsoleAdapter {
       );
     }
 
+    if (route === 'GET /api/inbox') return sendJson(res, 200, store!.listMessages(null));
+
     const file = /^GET \/api\/files\/([^/]+)$/.exec(route);
     if (file) {
       const stored = store!.getFile(decodeURIComponent(file[1]));
@@ -195,9 +191,9 @@ export function createConsoleAdapter(opts: ConsoleOptions): ConsoleAdapter {
     isConnected: () => server !== null,
 
     async deliver(platformId, _threadId, message): Promise<string | undefined> {
-      const agentGroupId = agentGroupIdFrom(platformId);
+      const agentGroupId = chatOf(platformId);
       if (!store) return undefined;
-      if (!agentGroupId) {
+      if (agentGroupId === undefined) {
         log.warn('Console dropped an Outbound Message for a platform id it has no Chat for', {
           platformId,
           kind: message.kind,
@@ -226,7 +222,14 @@ export function createConsoleAdapter(opts: ConsoleOptions): ConsoleAdapter {
         mimeType: mimeTypeFor(f.filename),
         data: f.data,
       }));
-      const stored = store.addMessage({ agentGroupId, role: 'agent', text: textOf(content), files });
+      const carded = await cardOf(content);
+      const stored = store.addMessage({
+        agentGroupId,
+        role: 'agent',
+        text: carded?.text ?? textOf(content),
+        files,
+        card: carded?.card,
+      });
       broadcast({ type: 'message', message: stored });
       return stored.id;
     },
@@ -260,7 +263,8 @@ function parseUploads(raw: unknown): NewFile[] {
 }
 
 // The router stores an Owner message for the Agent as `<inbound id>:<agentGroupId>`, and edit/reaction echo that id back.
-function storeIdOf(messageId: string, agentGroupId: string): string {
+function storeIdOf(messageId: string, agentGroupId: string | null): string {
+  if (agentGroupId === null) return messageId;
   const suffix = `:${agentGroupId}`;
   return messageId.endsWith(suffix) ? messageId.slice(0, -suffix.length) : messageId;
 }

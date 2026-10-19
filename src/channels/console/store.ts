@@ -1,5 +1,7 @@
 import Database from 'better-sqlite3';
 
+import type { Card } from './cards.js';
+
 export type Role = 'owner' | 'agent';
 
 export interface StoredFile {
@@ -10,9 +12,11 @@ export interface StoredFile {
 
 export interface ChatMessage {
   id: string;
-  agentGroupId: string;
+  /** null for the Inbox, which belongs to no Agent Group. */
+  agentGroupId: string | null;
   role: Role;
   text: string;
+  card: Card | null;
   reactions: string[];
   files: StoredFile[];
   createdAt: string;
@@ -30,6 +34,7 @@ interface MessageRow {
   agent_group_id: string;
   role: Role;
   text: string;
+  card: string | null;
   reactions: string;
   created_at: string;
   edited_at: string | null;
@@ -63,7 +68,15 @@ const MIGRATIONS = [
      data BLOB NOT NULL
    );
    CREATE INDEX files_by_message ON files (message_id);`,
+  `ALTER TABLE messages ADD COLUMN card TEXT;`,
 ];
+
+// agent_group_id is NOT NULL, and no Agent Group can have an empty id.
+const INBOX_KEY = '';
+
+function chatKey(agentGroupId: string | null): string {
+  return agentGroupId ?? INBOX_KEY;
+}
 
 function newId(prefix: string): string {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
@@ -86,13 +99,26 @@ export class ConsoleStore {
     }
   }
 
-  addMessage(input: { agentGroupId: string; role: Role; text: string; files?: NewFile[] }): ChatMessage {
+  addMessage(input: {
+    agentGroupId: string | null;
+    role: Role;
+    text: string;
+    files?: NewFile[];
+    card?: Card;
+  }): ChatMessage {
     const id = newId('msg');
     const now = new Date().toISOString();
     this.db.transaction(() => {
       this.db
-        .prepare('INSERT INTO messages (id, agent_group_id, role, text, created_at) VALUES (?, ?, ?, ?, ?)')
-        .run(id, input.agentGroupId, input.role, input.text, now);
+        .prepare('INSERT INTO messages (id, agent_group_id, role, text, card, created_at) VALUES (?, ?, ?, ?, ?, ?)')
+        .run(
+          id,
+          chatKey(input.agentGroupId),
+          input.role,
+          input.text,
+          input.card ? JSON.stringify(input.card) : null,
+          now,
+        );
       const insertFile = this.db.prepare(
         'INSERT INTO files (id, message_id, name, mime_type, data) VALUES (?, ?, ?, ?, ?)',
       );
@@ -106,10 +132,10 @@ export class ConsoleStore {
     return row ? this.hydrate([row])[0] : null;
   }
 
-  listMessages(agentGroupId: string): ChatMessage[] {
+  listMessages(agentGroupId: string | null): ChatMessage[] {
     const rows = this.db
       .prepare('SELECT * FROM messages WHERE agent_group_id = ? ORDER BY seq')
-      .all(agentGroupId) as MessageRow[];
+      .all(chatKey(agentGroupId)) as MessageRow[];
     return this.hydrate(rows);
   }
 
@@ -120,14 +146,21 @@ export class ConsoleStore {
     return row ? this.hydrate([row])[0] : null;
   }
 
-  editMessage(agentGroupId: string, id: string, text: string): ChatMessage | null {
+  editMessage(agentGroupId: string | null, id: string, text: string): ChatMessage | null {
     const result = this.db
       .prepare('UPDATE messages SET text = ?, edited_at = ? WHERE id = ? AND agent_group_id = ?')
-      .run(text, new Date().toISOString(), id, agentGroupId);
+      .run(text, new Date().toISOString(), id, chatKey(agentGroupId));
     return result.changes > 0 ? this.getMessage(id) : null;
   }
 
-  addReaction(agentGroupId: string, id: string, emoji: string): ChatMessage | null {
+  setCard(agentGroupId: string | null, id: string, card: Card): ChatMessage | null {
+    const result = this.db
+      .prepare('UPDATE messages SET card = ? WHERE id = ? AND agent_group_id = ?')
+      .run(JSON.stringify(card), id, chatKey(agentGroupId));
+    return result.changes > 0 ? this.getMessage(id) : null;
+  }
+
+  addReaction(agentGroupId: string | null, id: string, emoji: string): ChatMessage | null {
     const message = this.getMessage(id);
     if (!message || message.agentGroupId !== agentGroupId) return null;
     if (message.reactions.includes(emoji)) return message;
@@ -154,9 +187,10 @@ export class ConsoleStore {
     );
     return rows.map((row) => ({
       id: row.id,
-      agentGroupId: row.agent_group_id,
+      agentGroupId: row.agent_group_id === INBOX_KEY ? null : row.agent_group_id,
       role: row.role,
       text: row.text,
+      card: row.card ? (JSON.parse(row.card) as Card) : null,
       reactions: JSON.parse(row.reactions) as string[],
       files: (filesOf.all(row.id) as FileRow[]).map((f) => ({ id: f.id, name: f.name, mimeType: f.mime_type })),
       createdAt: row.created_at,
