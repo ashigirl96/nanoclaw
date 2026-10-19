@@ -19,6 +19,8 @@ vi.mock('../../log.js', () => ({
 import type { ChannelSetup } from '../adapter.js';
 import { closeDb, initTestDb, runMigrations } from '../../db/index.js';
 import { createAgentGroup } from '../../db/agent-groups.js';
+import { createScheduledTask, prepareScheduledTask } from '../../modules/scheduling/create.js';
+import { appendRunLog } from '../../modules/scheduling/run-log.js';
 import { createConsoleAdapter, type ConsoleAdapter } from './adapter.js';
 
 let adapter: ConsoleAdapter | null = null;
@@ -122,5 +124,73 @@ describe('Library', () => {
     });
 
     expect(await api('/api/agent-groups/ag-a/library')).toEqual([]);
+  });
+});
+
+interface Routine {
+  seriesId: string;
+  prompt: string;
+  status: string;
+  schedule: string;
+  nextRun: string;
+  lastRun: string | null;
+  runs: number;
+  failedRuns: number;
+  lastResult: string | null;
+}
+
+describe('Routine', () => {
+  it("lists the Agent Group's Tasks with their schedule, next run, and last result", async () => {
+    const daily = await createScheduledTask(
+      'ag-a',
+      prepareScheduledTask({
+        name: 'briefing',
+        prompt: 'Send the morning briefing.',
+        recurrence: '0 9 * * *',
+        timezone: 'UTC',
+      }),
+    );
+    await createScheduledTask(
+      'ag-a',
+      prepareScheduledTask({ prompt: 'Remind me once.', processAfter: '2099-01-01T00:00:00Z', timezone: 'UTC' }),
+      { status: 'paused' },
+    );
+    await createScheduledTask(
+      'ag-b',
+      prepareScheduledTask({ prompt: 'Not Alice.', processAfter: '2099-01-01T00:00:00Z', timezone: 'UTC' }),
+    );
+    await appendRunLog('ag-a', daily.row.id, 'sent the briefing to #general');
+    await start();
+
+    const routines = await api<Routine[]>('/api/agent-groups/ag-a/routines');
+
+    expect(routines).toEqual([
+      {
+        seriesId: daily.row.id,
+        prompt: 'Send the morning briefing.',
+        status: 'pending',
+        schedule: '0 9 * * *',
+        nextRun: daily.row.processAfter,
+        lastRun: null,
+        runs: 0,
+        failedRuns: 0,
+        lastResult: expect.stringContaining('sent the briefing to #general'),
+      },
+      expect.objectContaining({
+        prompt: 'Remind me once.',
+        status: 'paused',
+        schedule: 'once',
+        nextRun: '2099-01-01T00:00:00.000Z',
+        lastResult: null,
+      }),
+    ]);
+  });
+
+  it('offers no way to change a Task', async () => {
+    await start();
+
+    const res = await call('/api/agent-groups/ag-a/routines', { method: 'POST', body: '{}' });
+
+    expect(res.status).toBe(404);
   });
 });

@@ -1,4 +1,5 @@
 import { getAgentGroup } from '../../db/agent-groups.js';
+import { listRoutines } from './routines.js';
 import type { ConsoleStore } from './store.js';
 
 export interface PanelResponse {
@@ -13,11 +14,13 @@ export interface PanelContext {
 
 /** The right-hand panel's API (details, Library, Routine) and the "+" flow. Returns null for other routes. */
 export async function panelRoute(route: string, ctx: PanelContext): Promise<PanelResponse | null> {
-  const perGroup = /^GET \/api\/agent-groups\/([^/]+)\/(library)$/.exec(route);
+  const perGroup = /^GET \/api\/agent-groups\/([^/]+)\/(library|routines)$/.exec(route);
   if (perGroup) {
-    const agentGroupId = decodeURIComponent(perGroup[1]);
+    const [, rawId, tab] = perGroup;
+    const agentGroupId = decodeURIComponent(rawId);
     if (!(await getAgentGroup(agentGroupId))) return notFound(`unknown agent group ${agentGroupId}`);
-    return { status: 200, body: ctx.store.listAgentFiles(agentGroupId) };
+    if (tab === 'library') return { status: 200, body: ctx.store.listAgentFiles(agentGroupId) };
+    return { status: 200, body: await listRoutines(agentGroupId) };
   }
   return null;
 }
