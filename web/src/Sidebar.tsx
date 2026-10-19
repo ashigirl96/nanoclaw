@@ -7,12 +7,18 @@ interface Props {
   inboxWaiting: number;
   onSelect: (id: string) => void;
   onSelectInbox: () => void;
+  onNewAgent: () => void;
 }
 
-export function Sidebar({ groups, selected, inboxSelected, inboxWaiting, onSelect, onSelectInbox }: Props) {
+export function Sidebar({ groups, selected, inboxSelected, inboxWaiting, onSelect, onSelectInbox, onNewAgent }: Props) {
   return (
     <nav className="sidebar" aria-label="Agent">
-      <div className="sidebar-title">Console</div>
+      <div className="sidebar-title">
+        Console
+        <button type="button" className="new-agent-button" aria-label="Agent を作る" onClick={onNewAgent}>
+          +
+        </button>
+      </div>
       <ul>
         <li>
           <button
