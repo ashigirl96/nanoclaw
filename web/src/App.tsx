@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { type CSSProperties, useCallback, useEffect, useRef, useState } from 'react';
 
 import { type AgentGroupSummary, type ChatMessage, type ConsoleEvent, api, awaitsAnswer, subscribe } from './api';
 import { Chat } from './Chat';
@@ -7,10 +7,14 @@ import { Inbox } from './Inbox';
 import { NewAgentDialog } from './NewAgentDialog';
 import { announce, isForeground, useForeground, useNotificationPermission } from './notifications';
 import { Panel } from './Panel';
+import { ResizeHandle, useStoredWidth } from './Resizer';
 import { Sidebar } from './Sidebar';
 import { TimezoneContext } from './time';
 
 type View = { kind: 'inbox' } | { kind: 'chat'; agentGroupId: string } | null;
+
+const SIDEBAR_WIDTH = { initial: 264, min: 200, max: 480 };
+const PANEL_WIDTH = { initial: 320, min: 260, max: 600 };
 
 function viewFromPath(): View {
   if (window.location.pathname === '/inbox') return { kind: 'inbox' };
@@ -27,6 +31,8 @@ export function App() {
   const [creating, setCreating] = useState(false);
   const [timezone, setTimezone] = useState<string | undefined>(undefined);
   const [panelOpen, setPanelOpen] = useState(true);
+  const [sidebarWidth, setSidebarWidth] = useStoredWidth('console.sidebarWidth', SIDEBAR_WIDTH);
+  const [panelWidth, setPanelWidth] = useStoredWidth('console.panelWidth', PANEL_WIDTH);
   const selected = view?.kind === 'chat' ? view.agentGroupId : null;
 
   useEffect(() => {
@@ -115,7 +121,10 @@ export function App() {
 
   return (
     <TimezoneContext.Provider value={timezone}>
-      <div className={current && panelOpen ? 'layout with-panel' : 'layout'}>
+      <div
+        className={current && panelOpen ? 'layout with-panel' : 'layout'}
+        style={{ '--sidebar-width': `${sidebarWidth}px`, '--panel-width': `${panelWidth}px` } as CSSProperties}
+      >
         <Sidebar
           groups={groups}
           selected={selected}
@@ -124,6 +133,13 @@ export function App() {
           onSelect={(id) => navigate({ kind: 'chat', agentGroupId: id })}
           onSelectInbox={() => navigate({ kind: 'inbox' })}
           onNewAgent={() => setCreating(true)}
+        />
+        <ResizeHandle
+          edge="right"
+          label="サイドバーの幅"
+          width={sidebarWidth}
+          bounds={SIDEBAR_WIDTH}
+          onResize={setSidebarWidth}
         />
         {creating && <NewAgentDialog onCreated={(id) => void created(id)} onClose={() => setCreating(false)} />}
         <main className="main">
@@ -141,6 +157,8 @@ export function App() {
               messages={messages}
               onSent={(m) => setMessages((prev) => upsert(prev, m))}
               onError={setError}
+              panelOpen={panelOpen}
+              onTogglePanel={() => setPanelOpen((open) => !open)}
               headerAction={
                 !panelOpen && (
                   <button
@@ -158,6 +176,9 @@ export function App() {
             <div className="empty">左の一覧から Agent を選んでください。</div>
           )}
         </main>
+        {current && panelOpen && (
+          <ResizeHandle edge="left" label="パネルの幅" width={panelWidth} bounds={PANEL_WIDTH} onResize={setPanelWidth} />
+        )}
         {current && panelOpen && (
           <Panel
             key={current.id}

@@ -21,10 +21,12 @@ interface Props {
   messages: ChatMessage[];
   onSent: (message: ChatMessage) => void;
   onError: (message: string) => void;
+  panelOpen: boolean;
+  onTogglePanel: () => void;
   headerAction?: ReactNode;
 }
 
-export function Chat({ group, messages, onSent, onError, headerAction }: Props) {
+export function Chat({ group, messages, onSent, onError, panelOpen, onTogglePanel, headerAction }: Props) {
   const bottom = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -35,10 +37,10 @@ export function Chat({ group, messages, onSent, onError, headerAction }: Props) 
     <section className="chat">
       <div className="chat-scroll">
         <div className="chat-title">
-          <span className="chat-pill">
+          <button type="button" className="chat-pill" aria-expanded={panelOpen} onClick={onTogglePanel}>
             <Avatar id={group.id} name={group.name} size="sm" />
             {group.name}
-          </span>
+          </button>
           {headerAction}
         </div>
         <Thread messages={messages} onAnswered={onSent} onError={onError} />
