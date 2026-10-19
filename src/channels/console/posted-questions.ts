@@ -1,13 +1,15 @@
-import { type ChoiceCard, type FormCard, type FormField, choiceCardFrom } from './cards.js';
+import {
+  type ChoiceCard,
+  FORM_FIELD_TYPES,
+  type FormCard,
+  type FormField,
+  answerHeading,
+  choiceCardFrom,
+} from './cards.js';
 
-const FIELD_TYPES: ReadonlySet<string> = new Set(['text', 'textarea', 'select', 'multi_select', 'date']);
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 const EMPTY = '(未入力)';
 
-/**
- * The card for a post_question payload. Its options become a Question card that no
- * pending_questions row backs, so every answer takes the Chat Message route (ADR 0002).
- */
 export function postedCardOf(content: Record<string, unknown>): ChoiceCard | FormCard | null {
   if (content.type !== 'post_question' || typeof content.questionId !== 'string') return null;
   if (Array.isArray(content.options)) return choiceCardFrom({ ...content, type: 'ask_question' }, true);
@@ -24,7 +26,13 @@ export function postedCardOf(content: Record<string, unknown>): ChoiceCard | For
 
 function fieldFrom(raw: unknown): FormField[] {
   const f = raw as Record<string, unknown> | null;
-  if (!f || typeof f.id !== 'string' || typeof f.label !== 'string' || !FIELD_TYPES.has(f.type as string)) return [];
+  if (
+    !f ||
+    typeof f.id !== 'string' ||
+    typeof f.label !== 'string' ||
+    !FORM_FIELD_TYPES.includes(f.type as FormField['type'])
+  )
+    return [];
   const type = f.type as FormField['type'];
   if (type !== 'select' && type !== 'multi_select') return [{ id: f.id, label: f.label, type }];
   const options = Array.isArray(f.options) ? f.options.filter((o): o is string => typeof o === 'string') : [];
@@ -46,8 +54,7 @@ export function formAnswerOf(card: FormCard, rawValues: unknown): FormAnswer {
     lines.push(`${field.label}: ${shown || EMPTY}`);
   }
   const resolution = lines.join('\n');
-  const asked = [card.title, card.question].filter(Boolean).join(' — ');
-  return { resolution, text: `「${asked}」への答え:\n${resolution}` };
+  return { resolution, text: `${answerHeading(card)}\n${resolution}` };
 }
 
 function valueOf(field: FormField, value: unknown): string | { error: string } {

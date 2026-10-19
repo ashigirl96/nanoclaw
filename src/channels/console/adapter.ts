@@ -3,10 +3,12 @@ import type { AddressInfo } from 'net';
 import path from 'path';
 
 import { DATA_DIR } from '../../config.js';
-import { getAgentGroup, getAllAgentGroups } from '../../db/agent-groups.js';
+import { getAllAgentGroups } from '../../db/agent-groups.js';
 import { log } from '../../log.js';
 import type { ChannelAdapter, ChannelSetup } from '../adapter.js';
-import { type Activity, ActivityBoard, currentToolOf, isMidTurn } from './activity.js';
+import { ActivityBoard, currentToolOf, isMidTurn } from './activity.js';
+import { answersRoute } from './answers.js';
+import { isAnswerable } from './cards.js';
 import {
   CHANNEL_TYPE,
   CONSOLE_DEFAULTS,
@@ -15,26 +17,27 @@ import {
   chatOf,
   ensureConsoleChat,
   platformIdFor,
-  platformIdOfChat,
   storeKeyOf,
 } from './chat.js';
 import { onAgentGroupsChanged } from './create-agent.js';
+import {
+  type ConsoleEvent,
+  HttpError,
+  type Route,
+  type RouteContext,
+  readJson,
+  requireAgentGroup,
+  sendJson,
+} from './http.js';
+import { inboxRoute } from './inbox.js';
 import { mimeTypeFor } from './mime.js';
-import type { FormCard } from './cards.js';
-import { type Notice, noticeFor } from './notify.js';
+import { newAgentRoute } from './new-agent.js';
+import { noticeFor } from './notify.js';
 import { panelRoute } from './panel.js';
-import { formAnswerOf } from './posted-questions.js';
-import { answerRoute, cardOf, lateAnswerText } from './questions.js';
+import { cardOf } from './questions.js';
 import { serveStatic } from './static.js';
-import { answerWaitingTool } from './waiting-tool.js';
 import { type ChatMessage, ConsoleStore, type NewFile } from './store.js';
-
-type ConsoleEvent =
-  | { type: 'message'; message: ChatMessage }
-  | { type: 'activity'; agentGroupId: string; activity: Activity }
-  | { type: 'unread'; agentGroupId: string; unread: number }
-  | ({ type: 'notify' } & Notice)
-  | { type: 'agent-groups' };
+import { broadcastUnread, readRoute } from './unread.js';
 
 export interface ConsoleOptions {
   port: number;
@@ -46,17 +49,7 @@ export interface ConsoleAdapter extends ChannelAdapter {
   url(): string;
 }
 
-class HttpError extends Error {
-  constructor(
-    readonly status: number,
-    message: string,
-  ) {
-    super(message);
-  }
-}
-
-const MAX_BODY_BYTES = 50 * 1024 * 1024;
-const EXPIRED_RESOLUTION = '⏱️ もう受け付けていません';
+const ROUTES: Route[] = [answersRoute, inboxRoute, readRoute, panelRoute, newAgentRoute];
 
 export function consoleAdapterFromEnv(env: Record<string, string | undefined>): ConsoleAdapter | null {
   if (!env.CONSOLE_PORT) return null;
@@ -83,12 +76,6 @@ export function createConsoleAdapter(opts: ConsoleOptions): ConsoleAdapter {
     for (const res of subscribers) res.write(frame);
   }
 
-  function broadcastUnread(agentGroupId: string): number {
-    const unread = store!.unreadCount(agentGroupId);
-    broadcast({ type: 'unread', agentGroupId, unread });
-    return unread;
-  }
-
   function subscribe(req: http.IncomingMessage, res: http.ServerResponse): void {
     res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache', connection: 'keep-alive' });
     res.write(': connected\n\n');
@@ -96,12 +83,7 @@ export function createConsoleAdapter(opts: ConsoleOptions): ConsoleAdapter {
     req.on('close', () => subscribers.delete(res));
   }
 
-  async function requireAgentGroup(id: string): Promise<string> {
-    if (!(await getAgentGroup(id))) throw new HttpError(404, `unknown agent group ${id}`);
-    return id;
-  }
-
-  async function sendFromOwner(agentGroupId: string, body: Record<string, unknown>) {
+  async function sendFromOwner(agentGroupId: string, body: Record<string, unknown>): Promise<ChatMessage> {
     const text = typeof body.text === 'string' ? body.text : '';
     const files = parseUploads(body.files);
     if (!text && files.length === 0) throw new HttpError(400, 'text or files is required');
@@ -127,50 +109,6 @@ export function createConsoleAdapter(opts: ConsoleOptions): ConsoleAdapter {
       },
     });
     return message;
-  }
-
-  async function answerCard(messageId: string, body: Record<string, unknown>): Promise<ChatMessage> {
-    const message = store!.getMessage(messageId);
-    const card = message?.card;
-    if (!message || !card || card.type === 'links') throw new HttpError(404, 'no card takes answers here');
-    if (card.type === 'form') return answerForm(message, card, body.values);
-    const option = card.options.find((o) => o.value === body.value);
-    if (!option) throw new HttpError(400, 'value must be one of the card options');
-    if (card.resolution !== null) throw new HttpError(409, 'the card is already answered');
-
-    const route = await answerRoute(card);
-    if (route.kind !== 'deferred') {
-      const resolution = route.kind === 'expired' ? EXPIRED_RESOLUTION : option.selectedLabel;
-      const resolved = store!.updateCard(message.agentGroupId, message.id, (c) =>
-        c.type !== 'links' && c.resolution === null ? { ...c, resolution } : null,
-      );
-      if (!resolved) throw new HttpError(409, 'the card is already answered');
-      broadcast({ type: 'message', message: resolved });
-    }
-
-    if (route.kind === 'action' || route.kind === 'deferred') {
-      setupConfig!.onAction(card.questionId, option.value, OWNER_USER_ID, {
-        messageId: message.id,
-        platformId: platformIdOfChat(message.agentGroupId),
-      });
-    } else if (route.kind !== 'expired' && message.agentGroupId !== null) {
-      const taken = route.kind === 'tool' && (await answerWaitingTool(route.pending, option.value));
-      if (!taken) await sendFromOwner(message.agentGroupId, { text: lateAnswerText(card, option) });
-    }
-    return store!.getMessage(message.id)!;
-  }
-
-  async function answerForm(message: ChatMessage, card: FormCard, values: unknown): Promise<ChatMessage> {
-    if (card.resolution !== null) throw new HttpError(409, 'the card is already answered');
-    const answer = formAnswerOf(card, values);
-    if ('error' in answer) throw new HttpError(400, answer.error);
-    const resolved = store!.updateCard(message.agentGroupId, message.id, (c) =>
-      c.type === 'form' && c.resolution === null ? { ...c, resolution: answer.resolution } : null,
-    );
-    if (!resolved) throw new HttpError(409, 'the card is already answered');
-    broadcast({ type: 'message', message: resolved });
-    if (message.agentGroupId !== null) await sendFromOwner(message.agentGroupId, { text: answer.text });
-    return resolved;
   }
 
   async function handle(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
@@ -200,11 +138,6 @@ export function createConsoleAdapter(opts: ConsoleOptions): ConsoleAdapter {
       );
     }
 
-    if (route === 'GET /api/inbox') return sendJson(res, 200, store!.listMessages(null));
-
-    const answer = /^POST \/api\/messages\/([^/]+)\/answer$/.exec(route);
-    if (answer) return sendJson(res, 200, await answerCard(decodeURIComponent(answer[1]), await readJson(req)));
-
     const file = /^GET \/api\/files\/([^/]+)$/.exec(route);
     if (file) {
       const stored = store!.getFile(decodeURIComponent(file[1]));
@@ -220,7 +153,7 @@ export function createConsoleAdapter(opts: ConsoleOptions): ConsoleAdapter {
       return;
     }
 
-    const chat = /^(GET|POST) \/api\/agent-groups\/([^/]+)\/(open|messages|read)$/.exec(route);
+    const chat = /^(GET|POST) \/api\/agent-groups\/([^/]+)\/(open|messages)$/.exec(route);
     if (chat) {
       const [, method, rawId, action] = chat;
       const agentGroupId = await requireAgentGroup(decodeURIComponent(rawId));
@@ -234,17 +167,19 @@ export function createConsoleAdapter(opts: ConsoleOptions): ConsoleAdapter {
       if (method === 'POST' && action === 'messages') {
         return sendJson(res, 200, await sendFromOwner(agentGroupId, await readJson(req)));
       }
-      if (method === 'POST' && action === 'read') {
-        const { messageId } = await readJson(req);
-        if (typeof messageId !== 'string' || !store!.markRead(agentGroupId, messageId)) {
-          throw new HttpError(404, 'unknown message in this Chat');
-        }
-        return sendJson(res, 200, { unread: broadcastUnread(agentGroupId) });
-      }
     }
 
-    const panel = await panelRoute(route, { store: store!, readBody: () => readJson(req) });
-    if (panel) return sendJson(res, panel.status, panel.body);
+    const ctx: RouteContext = {
+      store: store!,
+      readBody: () => readJson(req),
+      broadcast,
+      sendFromOwner,
+      onAction: (...args) => setupConfig!.onAction(...args),
+    };
+    for (const answerRoute of ROUTES) {
+      const response = await answerRoute(route, ctx);
+      if (response) return sendJson(res, response.status, response.body);
+    }
 
     if (req.method === 'GET' && !url.pathname.startsWith('/api/')) return serveStatic(opts.distDir, url.pathname, res);
 
@@ -316,7 +251,7 @@ export function createConsoleAdapter(opts: ConsoleOptions): ConsoleAdapter {
         const edited =
           resolution === null
             ? store.editMessage(agentGroupId, id, textOf(content))
-            : store.updateCard(agentGroupId, id, (c) => (c.type === 'links' ? null : { ...c, resolution }));
+            : store.updateCard(agentGroupId, id, (c) => (isAnswerable(c) ? { ...c, resolution } : null));
         if (edited) broadcast({ type: 'message', message: edited });
         return undefined;
       }
@@ -345,7 +280,7 @@ export function createConsoleAdapter(opts: ConsoleOptions): ConsoleAdapter {
       });
       broadcast({ type: 'message', message: stored });
       if (agentGroupId !== null) {
-        broadcastUnread(agentGroupId);
+        broadcastUnread({ store, broadcast }, agentGroupId);
         // The message is already stored, so a failed read must not fail the delivery and get it sent twice.
         if (await isMidTurn(agentGroupId, platformId).catch(() => false)) activity.holdThroughDelivery(agentGroupId);
         else activity.clear(agentGroupId);
@@ -396,27 +331,4 @@ function terminalResolutionOf(content: Record<string, unknown>): string | null {
 function textOf(content: Record<string, unknown>): string {
   if (typeof content.markdown === 'string') return content.markdown;
   return typeof content.text === 'string' ? content.text : '';
-}
-
-function sendJson(res: http.ServerResponse, status: number, body: unknown): void {
-  res.writeHead(status, { 'content-type': 'application/json' });
-  res.end(JSON.stringify(body));
-}
-
-async function readJson(req: http.IncomingMessage): Promise<Record<string, unknown>> {
-  const chunks: Buffer[] = [];
-  let size = 0;
-  for await (const chunk of req) {
-    size += (chunk as Buffer).length;
-    if (size > MAX_BODY_BYTES) throw new HttpError(413, 'request body too large');
-    chunks.push(chunk as Buffer);
-  }
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(Buffer.concat(chunks).toString('utf8'));
-  } catch (err) {
-    if (!(err instanceof SyntaxError)) throw err;
-  }
-  if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) return parsed as Record<string, unknown>;
-  throw new HttpError(400, 'body must be a JSON object');
 }

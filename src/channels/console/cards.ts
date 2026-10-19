@@ -27,10 +27,27 @@ export interface LinkCard {
 
 export type Card = ChoiceCard | LinkCard | FormCard;
 
+export type AnswerableCard = ChoiceCard | FormCard;
+
+export function isAnswerable(card: Card): card is AnswerableCard {
+  return card.type !== 'links';
+}
+
+export function awaitsAnswer(card: Card): card is AnswerableCard {
+  return isAnswerable(card) && card.resolution === null;
+}
+
+/** How an Owner Chat Message names the Question it answers. */
+export function answerHeading(card: AnswerableCard): string {
+  return `「${[card.title, card.question].filter(Boolean).join(' — ')}」への答え:`;
+}
+
+export const FORM_FIELD_TYPES = ['text', 'textarea', 'select', 'multi_select', 'date'] as const;
+
 export interface FormField {
   id: string;
   label: string;
-  type: 'text' | 'textarea' | 'select' | 'multi_select' | 'date';
+  type: (typeof FORM_FIELD_TYPES)[number];
   /** The choices of a select or multi_select field. */
   options?: string[];
 }
