@@ -4,11 +4,40 @@ export interface StoredFile {
   mimeType: string;
 }
 
+export interface CardOption {
+  label: string;
+  selectedLabel: string;
+  value: string;
+  style?: 'primary' | 'danger' | 'default';
+}
+
+/** An Approval Request or a Question; answered by picking one option. */
+export interface ChoiceCard {
+  type: 'approval' | 'question';
+  questionId: string;
+  title: string;
+  question: string;
+  options: CardOption[];
+  resolution: string | null;
+}
+
+export interface LinkCard {
+  type: 'links';
+  title: string;
+  description: string;
+  children: string[];
+  links: Array<{ label: string; url: string; style?: 'primary' | 'danger' | 'default' }>;
+}
+
+export type Card = ChoiceCard | LinkCard;
+
 export interface ChatMessage {
   id: string;
-  agentGroupId: string;
+  /** null for the Inbox. */
+  agentGroupId: string | null;
   role: 'owner' | 'agent';
   text: string;
+  card: Card | null;
   reactions: string[];
   files: StoredFile[];
   createdAt: string;
@@ -46,6 +75,12 @@ export const api = {
     request<ChatMessage>(`/api/agent-groups/${encodeURIComponent(agentGroupId)}/messages`, {
       method: 'POST',
       body: JSON.stringify({ text, files }),
+    }),
+  inbox: () => request<ChatMessage[]>('/api/inbox'),
+  answer: (messageId: string, value: string) =>
+    request<ChatMessage>(`/api/messages/${encodeURIComponent(messageId)}/answer`, {
+      method: 'POST',
+      body: JSON.stringify({ value }),
     }),
 };
 
