@@ -2,6 +2,7 @@ import { useState } from 'react';
 
 import { type Card, type ChatMessage, type ChoiceCard, type LinkCard, api } from './api';
 import { FormCardView } from './FormCard';
+import { Markdown } from './Markdown';
 
 interface Props {
   message: ChatMessage & { card: Card };
@@ -47,7 +48,7 @@ function ChoiceCardView({
   return (
     <div className={`card ${card.type}`}>
       {card.title && <div className="card-eyebrow">{card.title}</div>}
-      {card.question && <div className="card-question">{card.question}</div>}
+      {card.question && <Markdown className="card-question" text={card.question} />}
       {card.resolution !== null ? (
         <div className="card-resolution">{card.resolution}</div>
       ) : asButtons ? (

@@ -1,6 +1,7 @@
 import { type FormEvent, useState } from 'react';
 
 import { type ChatMessage, type FormCard, type FormField, type FormValues, api } from './api';
+import { Markdown } from './Markdown';
 
 interface Props {
   messageId: string;
@@ -30,7 +31,7 @@ export function FormCardView({ messageId, card, onAnswered, onError }: Props) {
   return (
     <div className="card form">
       {card.title && <div className="card-eyebrow">{card.title}</div>}
-      {card.question && <div className="card-question">{card.question}</div>}
+      {card.question && <Markdown className="card-question" text={card.question} />}
       {card.resolution === null ? (
         <form className="card-form" onSubmit={(e) => void submit(e)}>
           {card.fields.map((field) => {

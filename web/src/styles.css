@@ -352,6 +352,85 @@ button {
   background: var(--bg-owner);
 }
 
+.markdown {
+  white-space: normal;
+  line-height: 1.6;
+}
+
+.markdown > :first-child {
+  margin-top: 0;
+}
+
+.markdown > :last-child {
+  margin-bottom: 0;
+}
+
+.markdown :is(p, ul, ol, pre, blockquote, table) {
+  margin: 0.6em 0;
+}
+
+.markdown :is(h1, h2, h3, h4) {
+  margin: 0.9em 0 0.4em;
+  font-size: 1.05em;
+  line-height: 1.4;
+}
+
+.markdown :is(ul, ol) {
+  padding-left: 1.4em;
+}
+
+.markdown li + li {
+  margin-top: 0.2em;
+}
+
+.markdown a {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.markdown code {
+  padding: 0.1em 0.35em;
+  border-radius: 5px;
+  background: var(--bg);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.9em;
+}
+
+.markdown pre {
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--bg);
+  overflow-x: auto;
+}
+
+.markdown pre code {
+  padding: 0;
+  background: none;
+}
+
+.markdown blockquote {
+  padding-left: 10px;
+  border-left: 3px solid var(--border);
+  color: var(--fg-muted);
+}
+
+.markdown table {
+  display: block;
+  border-collapse: collapse;
+  overflow-x: auto;
+}
+
+.markdown :is(th, td) {
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+}
+
+.markdown hr {
+  border: none;
+  border-top: 1px solid var(--border);
+}
+
 .message-meta {
   font-size: 0.75em;
   color: var(--fg-muted);

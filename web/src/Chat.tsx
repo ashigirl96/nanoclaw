@@ -13,6 +13,7 @@ import { Avatar } from './Avatar';
 import { CardView } from './Card';
 import { FilePreview } from './FilePreview';
 import { ArrowUpIcon, PlusIcon } from './Icons';
+import { Markdown } from './Markdown';
 import { startsNewStretch, useFormatDivider } from './time';
 
 interface Props {
@@ -77,7 +78,12 @@ export function Thread({
             {m.card ? (
               <CardView message={{ ...m, card: m.card }} onAnswered={onAnswered} onError={onError} />
             ) : (
-              m.text && <div className="bubble">{m.text}</div>
+              m.text &&
+              (m.role === 'agent' ? (
+                <Markdown className="bubble" text={m.text} />
+              ) : (
+                <div className="bubble">{m.text}</div>
+              ))
             )}
             {m.files.map((f) => (
               <FilePreview key={f.id} file={f} />
