@@ -36,7 +36,6 @@ export async function ensureOwner(): Promise<void> {
   await grantRole({ user_id: OWNER_USER_ID, role: 'owner', agent_group_id: null, granted_by: null, granted_at: now });
 }
 
-/** Creates the Agent Group's Console Messaging Group and Wiring if either is missing. */
 export async function ensureConsoleChat(agentGroupId: string): Promise<void> {
   await ensureOwner();
   const platformId = platformIdFor(agentGroupId);

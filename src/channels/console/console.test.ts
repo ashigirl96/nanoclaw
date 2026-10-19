@@ -244,6 +244,30 @@ describe('delivering Outbound Messages', () => {
     expect((await history('ag-a')).map((m) => [m.text, m.reactions])).toEqual([['final', ['thumbs_up']]]);
   });
 
+  it('applies a reaction to an Owner message, addressed by the id the router gave the Agent', async () => {
+    const consoleAdapter = await start();
+    const sent = await send('ag-a', { text: 'hello' });
+
+    await consoleAdapter.deliver('web:ag-a', null, {
+      kind: 'chat',
+      content: { operation: 'reaction', messageId: `${sent.id}:ag-a`, emoji: 'eyes' },
+    });
+
+    expect((await history('ag-a'))[0].reactions).toEqual(['eyes']);
+  });
+
+  it('ignores edits aimed at another Chat', async () => {
+    const consoleAdapter = await start();
+    const id = await consoleAdapter.deliver('web:ag-a', null, { kind: 'chat', content: { text: 'mine' } });
+
+    await consoleAdapter.deliver('web:ag-b', null, {
+      kind: 'chat',
+      content: { operation: 'edit', messageId: id, text: 'hijacked' },
+    });
+
+    expect((await history('ag-a'))[0].text).toBe('mine');
+  });
+
   it('pushes new and updated messages over SSE', async () => {
     const consoleAdapter = await start();
     const events = await openEvents();

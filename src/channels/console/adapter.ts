@@ -200,7 +200,7 @@ export function createConsoleAdapter(opts: ConsoleOptions): ConsoleAdapter {
       const content = (message.content ?? {}) as Record<string, unknown>;
 
       if (content.operation === 'edit' && typeof content.messageId === 'string') {
-        const edited = store.editMessage(content.messageId, textOf(content));
+        const edited = store.editMessage(agentGroupId, storeIdOf(content.messageId, agentGroupId), textOf(content));
         if (edited) broadcast({ type: 'message', message: edited });
         return undefined;
       }
@@ -209,7 +209,7 @@ export function createConsoleAdapter(opts: ConsoleOptions): ConsoleAdapter {
         typeof content.messageId === 'string' &&
         typeof content.emoji === 'string'
       ) {
-        const reacted = store.addReaction(content.messageId, content.emoji);
+        const reacted = store.addReaction(agentGroupId, storeIdOf(content.messageId, agentGroupId), content.emoji);
         if (reacted) broadcast({ type: 'message', message: reacted });
         return undefined;
       }
@@ -250,6 +250,12 @@ function parseUploads(raw: unknown): NewFile[] {
       data: Buffer.from(f.data, 'base64'),
     };
   });
+}
+
+// The router stores an Owner message for the Agent as `<inbound id>:<agentGroupId>`, and edit/reaction echo that id back.
+function storeIdOf(messageId: string, agentGroupId: string): string {
+  const suffix = `:${agentGroupId}`;
+  return messageId.endsWith(suffix) ? messageId.slice(0, -suffix.length) : messageId;
 }
 
 function textOf(content: Record<string, unknown>): string {

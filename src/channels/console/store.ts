@@ -120,14 +120,16 @@ export class ConsoleStore {
     return row ? this.hydrate([row])[0] : null;
   }
 
-  editMessage(id: string, text: string): ChatMessage | null {
-    this.db.prepare('UPDATE messages SET text = ?, edited_at = ? WHERE id = ?').run(text, new Date().toISOString(), id);
-    return this.getMessage(id);
+  editMessage(agentGroupId: string, id: string, text: string): ChatMessage | null {
+    const result = this.db
+      .prepare('UPDATE messages SET text = ?, edited_at = ? WHERE id = ? AND agent_group_id = ?')
+      .run(text, new Date().toISOString(), id, agentGroupId);
+    return result.changes > 0 ? this.getMessage(id) : null;
   }
 
-  addReaction(id: string, emoji: string): ChatMessage | null {
+  addReaction(agentGroupId: string, id: string, emoji: string): ChatMessage | null {
     const message = this.getMessage(id);
-    if (!message) return null;
+    if (!message || message.agentGroupId !== agentGroupId) return null;
     if (message.reactions.includes(emoji)) return message;
     this.db
       .prepare('UPDATE messages SET reactions = ? WHERE id = ?')
