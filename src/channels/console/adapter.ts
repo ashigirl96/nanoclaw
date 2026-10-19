@@ -166,9 +166,10 @@ export function createConsoleAdapter(opts: ConsoleOptions): ConsoleAdapter {
     if (avatar) {
       const image = store!.getAvatar(decodeURIComponent(avatar[1]));
       if (!image) throw new HttpError(404, 'no avatar');
-      // The URL carries the Avatar's version, so a changed Avatar gets a new URL.
+      // A changed Avatar gets a new URL, so only the URL of the version being served may be cached for good.
+      const current = url.searchParams.get('v') === image.version;
       return sendStoredBytes(res, image.mimeType, image.data, {
-        'cache-control': 'private, max-age=31536000, immutable',
+        'cache-control': current ? 'private, max-age=31536000, immutable' : 'no-cache',
       });
     }
 

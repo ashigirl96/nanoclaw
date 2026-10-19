@@ -27,9 +27,9 @@ export function createSlackAvatars(store: ConsoleStore, onChange: () => void): S
   const attempted = new Set<string>();
 
   async function refresh(agentGroupId: string): Promise<void> {
-    const instance = await ownSlackInstanceOf(agentGroupId);
-    if (!instance) throw new NoOwnSlackBotError(agentGroupId);
-    store.setAvatar(agentGroupId, 'slack', await fetchBotImage(instance));
+    const token = await ownSlackBotTokenOf(agentGroupId);
+    if (!token) throw new NoOwnSlackBotError(agentGroupId);
+    store.setAvatar(agentGroupId, 'slack', await fetchBotImage(token));
     onChange();
   }
 
@@ -49,11 +49,14 @@ export function createSlackAvatars(store: ConsoleStore, onChange: () => void): S
 }
 
 export async function hasOwnSlackBot(agentGroupId: string): Promise<boolean> {
-  return (await ownSlackInstanceOf(agentGroupId)) !== null;
+  return (await ownSlackBotTokenOf(agentGroupId)) !== null;
 }
 
-/** The dedicated Slack instance of the Agent Group's oldest Slack Wiring; the classic shared bot does not count. */
-async function ownSlackInstanceOf(agentGroupId: string): Promise<string | null> {
+/**
+ * The bot token of the dedicated Slack instance on the Agent Group's oldest Slack Wiring. The classic shared bot
+ * does not count, nor does an instance whose token is gone from .env, as after the Slack channel is removed.
+ */
+async function ownSlackBotTokenOf(agentGroupId: string): Promise<string | null> {
   const own = (await getMessagingGroupsByAgentGroup(agentGroupId)).filter(
     (mg) => mg.channel_type === 'slack' && mg.instance && mg.instance !== CLASSIC_INSTANCE,
   );
@@ -64,13 +67,12 @@ async function ownSlackInstanceOf(agentGroupId: string): Promise<string | null> 
     })),
   );
   wired.sort((a, b) => a.at.localeCompare(b.at));
-  return wired[0]?.instance ?? null;
+  if (!wired[0]) return null;
+  const tokenKey = botTokenKeyOf(wired[0].instance);
+  return readEnvFile([tokenKey])[tokenKey] || null;
 }
 
-async function fetchBotImage(instance: string): Promise<Image> {
-  const tokenKey = botTokenKeyOf(instance);
-  const token = readEnvFile([tokenKey])[tokenKey];
-  if (!token) throw new Error(`${tokenKey} is not set in .env`);
+async function fetchBotImage(token: string): Promise<Image> {
   const auth = await slackRead(token, 'auth.test', {});
   if (typeof auth.user_id !== 'string') throw new Error('slack auth.test failed: no user_id in response');
   const info = await slackRead(token, 'users.info', { user: auth.user_id });

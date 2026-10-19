@@ -116,6 +116,17 @@ describe('uploaded avatar', () => {
     expect((await summaryOf('ag-b')).avatarUrl).toBeNull();
   });
 
+  it('is cached for good only under the URL of the current version', async () => {
+    await upload('ag-a', PNG);
+    const { avatarUrl } = await summaryOf('ag-a');
+    const current = await fetch(h.adapter.url() + avatarUrl!);
+    expect(current.headers.get('cache-control')).toContain('immutable');
+
+    const stale = await fetch(h.adapter.url() + '/api/agent-groups/ag-a/avatar?v=0000000000000000');
+    expect(stale.status).toBe(200);
+    expect(stale.headers.get('cache-control')).toBe('no-cache');
+  });
+
   it('takes its type from the bytes, not from what the browser claimed', async () => {
     await upload('ag-a', JPEG, 'image/png');
     expect((await avatarOf('ag-a'))?.type).toBe('image/jpeg');
@@ -340,6 +351,16 @@ describe('Slack avatar', () => {
     image = 'https://avatars.slack-edge.com/new-bot.png';
     expect((await send('/api/agent-groups/ag-a/avatar/slack', {})).status).toBe(200);
     expect((await avatarOf('ag-a'))?.body).toEqual(NEW_BOT_PNG);
+  });
+
+  it('treats a dedicated Wiring whose bot token is gone from .env as having no Slack bot', async () => {
+    await wireSlack('ag-a', 'slack-alpha', '2026-10-03T00:00:00.000Z');
+    const calls = fakeSlack(botProfile('https://avatars.slack-edge.com/bot.png'), {});
+
+    await h.api('/api/agent-groups');
+    expect((await h.api<{ ownSlackBot: boolean }>('/api/agent-groups/ag-a')).ownSlackBot).toBe(false);
+    expect((await send('/api/agent-groups/ag-a/avatar/slack', {})).status).toBe(409);
+    expect(calls).toEqual([]);
   });
 
   it('says why Slack から取り直す could not refetch', async () => {

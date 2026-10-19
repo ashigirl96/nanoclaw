@@ -309,14 +309,14 @@ export class ConsoleStore {
       .run(agentGroupId, image?.mimeType ?? null, image?.data ?? null, image ? versionOf(image) : null);
   }
 
-  getAvatar(agentGroupId: string): Image | null {
-    const source = this.getAppearance(agentGroupId).avatar?.source;
-    if (!source) return null;
-    const c = AVATAR_COLUMNS[source];
+  getAvatar(agentGroupId: string): (Image & { version: string }) | null {
+    const avatar = this.getAppearance(agentGroupId).avatar;
+    if (!avatar) return null;
+    const c = AVATAR_COLUMNS[avatar.source];
     const row = this.db
       .prepare(`SELECT ${c.type} AS mime_type, ${c.data} AS data FROM agent_group_appearance WHERE agent_group_id = ?`)
       .get(agentGroupId) as { mime_type: string; data: Buffer };
-    return { mimeType: row.mime_type, data: row.data };
+    return { mimeType: row.mime_type, data: row.data, version: avatar.version };
   }
 
   close(): void {
