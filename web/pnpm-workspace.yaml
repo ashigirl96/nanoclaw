@@ -1,0 +1,3 @@
+# web/ is its own pnpm root so the Console frontend keeps a separate lockfile.
+# Same release-age gate as the root (3 days); see the root pnpm-workspace.yaml.
+minimumReleaseAge: 4320
