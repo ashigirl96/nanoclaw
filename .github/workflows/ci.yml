@@ -38,6 +38,11 @@ jobs:
       - name: Typecheck container
         run: pnpm exec tsc -p container/agent-runner/tsconfig.json --noEmit
 
+      - name: Build Console frontend
+        run: |
+          pnpm --dir web install --frozen-lockfile
+          pnpm --dir web run build
+
       - name: Host tests
         run: pnpm exec vitest run
 
