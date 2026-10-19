@@ -332,6 +332,8 @@ export function createConsoleAdapter(opts: ConsoleOptions): ConsoleAdapter {
         files,
         card: carded?.card,
       });
+      // Relayed before the Owner sees it, so an answer to the reply cannot reach a Session ahead of the reply.
+      if (chat.kind === 'group-chat') await relayToOtherMembers(chat.groupChatId, stored, files);
       broadcast({ type: 'message', message: stored });
       if (chat.kind !== 'inbox') {
         broadcastUnread({ store, broadcast }, chatId);
@@ -342,7 +344,6 @@ export function createConsoleAdapter(opts: ConsoleOptions): ConsoleAdapter {
           activity.clear(chatId, chat.agentGroupId);
         }
       }
-      if (chat.kind === 'group-chat') await relayToOtherMembers(chat.groupChatId, stored, files);
       return stored.id;
     },
 

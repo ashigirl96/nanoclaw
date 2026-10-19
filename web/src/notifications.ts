@@ -39,7 +39,7 @@ export function announce(notice: Notice, chatName: string, onClick: () => void):
   if (isForeground() || !('Notification' in window) || Notification.permission !== 'granted') return;
   const notification = new Notification(TITLE_PREFIX[notice.kind] + chatName, {
     body: notice.body,
-    tag: `${notice.agentGroupId ?? 'inbox'}:${notice.kind}`,
+    tag: `${notice.chatId}:${notice.kind}`,
   });
   notification.onclick = () => {
     window.focus();

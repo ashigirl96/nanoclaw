@@ -88,8 +88,14 @@ async function create(ctx: RouteContext): Promise<GroupChatSummary> {
   for (const id of agentGroupIds) members.push(await requireMentionable(id));
   refuseSharedNames(members);
 
-  const chat = ctx.store.createGroupChat(randomUUID(), name, agentGroupIds);
-  for (const id of agentGroupIds) await wireGroupChatMember(chat, id);
+  const draft = { id: randomUUID(), name };
+  try {
+    for (const id of agentGroupIds) await wireGroupChatMember(draft, id);
+  } catch (err) {
+    await dismantleGroupChat(draft.id);
+    throw err;
+  }
+  const chat = ctx.store.createGroupChat(draft.id, name, agentGroupIds);
   ctx.broadcast({ type: 'group-chats' });
   return summaryOf(ctx, chat);
 }
