@@ -326,6 +326,37 @@ describe('files', () => {
     expect(Buffer.from(await res.arrayBuffer()).toString()).toBe('png-bytes');
   });
 
+  it('serves a video from send_file in byte ranges so the player can seek', async () => {
+    const consoleAdapter = await start();
+
+    await consoleAdapter.deliver('web:ag-a', null, {
+      kind: 'chat',
+      content: { text: 'here', files: ['clip.mp4'] },
+      files: [{ filename: 'clip.mp4', data: Buffer.from('0123456789') }],
+    });
+
+    const [message] = await history('ag-a');
+    expect(message.files[0].mimeType).toBe('video/mp4');
+    const url = `${adapter!.url()}/api/files/${message.files[0].id}`;
+    const whole = await fetch(url);
+    expect(whole.headers.get('accept-ranges')).toBe('bytes');
+    await whole.arrayBuffer();
+
+    const part = await fetch(url, { headers: { range: 'bytes=2-5' } });
+    expect(part.status).toBe(206);
+    expect(part.headers.get('content-type')).toBe('video/mp4');
+    expect(part.headers.get('content-range')).toBe('bytes 2-5/10');
+    expect(Buffer.from(await part.arrayBuffer()).toString()).toBe('2345');
+
+    const tail = await fetch(url, { headers: { range: 'bytes=7-' } });
+    expect(Buffer.from(await tail.arrayBuffer()).toString()).toBe('789');
+
+    const outside = await fetch(url, { headers: { range: 'bytes=20-' } });
+    expect(outside.status).toBe(416);
+    expect(outside.headers.get('content-range')).toBe('bytes */10');
+    await outside.arrayBuffer();
+  });
+
   it('forwards files attached in the Console to the Agent and keeps them in the history', async () => {
     await start();
 

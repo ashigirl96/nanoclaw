@@ -10,6 +10,7 @@ export function FilePreview({ file }: { file: StoredFile }) {
   return (
     <figure className="file">
       {kind === 'image' && <img src={url} alt={file.name} />}
+      {kind === 'video' && <video src={url} controls preload="metadata" />}
       {kind === 'pdf' && <iframe src={url} title={file.name} />}
       {kind === 'text' && <TextPreview url={url} />}
       <figcaption>
@@ -36,8 +37,9 @@ function TextPreview({ url }: { url: string }) {
   return <pre className="text-preview">{text ?? '読み込み中…'}</pre>;
 }
 
-function previewKind(mimeType: string): 'image' | 'pdf' | 'text' | 'none' {
+function previewKind(mimeType: string): 'image' | 'video' | 'pdf' | 'text' | 'none' {
   if (mimeType.startsWith('image/')) return 'image';
+  if (mimeType.startsWith('video/')) return 'video';
   if (mimeType === 'application/pdf') return 'pdf';
   if (mimeType.startsWith('text/') || mimeType.startsWith('application/json')) return 'text';
   return 'none';

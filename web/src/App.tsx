@@ -12,6 +12,7 @@ import {
 } from './api';
 import { Avatar } from './Avatar';
 import { Chat } from './Chat';
+import { ConnectedAccounts } from './ConnectedAccounts';
 import { GroupChatSettingsDialog, NewGroupChatDialog } from './GroupChatDialogs';
 import { GroupIcon, PanelIcon } from './Icons';
 import { Inbox } from './Inbox';
@@ -24,6 +25,7 @@ import { TimezoneContext } from './time';
 
 type View =
   | { kind: 'inbox' }
+  | { kind: 'accounts' }
   | { kind: 'chat'; agentGroupId: string }
   | { kind: 'group-chat'; groupChatId: string }
   | null;
@@ -35,6 +37,7 @@ const PANEL_WIDTH = { initial: 320, min: 260, max: 600 };
 
 function viewFromPath(): View {
   if (window.location.pathname === '/inbox') return { kind: 'inbox' };
+  if (window.location.pathname === '/accounts') return { kind: 'accounts' };
   const groupChat = /^\/group-chat\/([^/]+)$/.exec(window.location.pathname);
   if (groupChat) return { kind: 'group-chat', groupChatId: decodeURIComponent(groupChat[1]) };
   const match = /^\/chat\/([^/]+)$/.exec(window.location.pathname);
@@ -42,7 +45,7 @@ function viewFromPath(): View {
 }
 
 function pathOf(view: Exclude<View, null>): string {
-  if (view.kind === 'inbox') return '/inbox';
+  if (view.kind === 'inbox' || view.kind === 'accounts') return `/${view.kind}`;
   if (view.kind === 'group-chat') return `/group-chat/${encodeURIComponent(view.groupChatId)}`;
   return `/chat/${encodeURIComponent(view.agentGroupId)}`;
 }
@@ -56,6 +59,7 @@ export function App() {
   const [error, setError] = useState<string | null>(null);
   const [dialog, setDialog] = useState<Dialog>(null);
   const [timezone, setTimezone] = useState<string | undefined>(undefined);
+  const [hasConnectedAccounts, setHasConnectedAccounts] = useState(false);
   const [panelOpen, setPanelOpen] = useState(true);
   const [sidebarWidth, setSidebarWidth] = useStoredWidth('console.sidebarWidth', SIDEBAR_WIDTH);
   const [panelWidth, setPanelWidth] = useStoredWidth('console.panelWidth', PANEL_WIDTH);
@@ -76,7 +80,10 @@ export function App() {
     void reloadGroupChats();
     api.inbox().then(setInbox, (err: Error) => setError(err.message));
     api.settings().then(
-      (s) => setTimezone(s.timezone),
+      (s) => {
+        setTimezone(s.timezone);
+        setHasConnectedAccounts(s.connectedAccounts);
+      },
       (err: Error) => setError(err.message),
     );
     const onPop = () => setView(viewFromPath());
@@ -211,9 +218,12 @@ export function App() {
           selected={selectedChatId}
           inboxSelected={view?.kind === 'inbox'}
           inboxWaiting={waiting}
+          accountsVisible={hasConnectedAccounts}
+          accountsSelected={view?.kind === 'accounts'}
           onSelect={(id) => navigate({ kind: 'chat', agentGroupId: id })}
           onSelectGroupChat={(id) => navigate({ kind: 'group-chat', groupChatId: id })}
           onSelectInbox={() => navigate({ kind: 'inbox' })}
+          onSelectAccounts={() => navigate({ kind: 'accounts' })}
           onNewAgent={() => setDialog('new-agent')}
           onNewGroupChat={() => setDialog('new-group-chat')}
         />
@@ -256,6 +266,8 @@ export function App() {
           )}
           {view?.kind === 'inbox' ? (
             <Inbox messages={inbox} onUpdated={(m) => setInbox((prev) => upsert(prev, m))} onError={setError} />
+          ) : view?.kind === 'accounts' && hasConnectedAccounts ? (
+            <ConnectedAccounts />
           ) : current ? (
             <Chat
               key={current.chatId}

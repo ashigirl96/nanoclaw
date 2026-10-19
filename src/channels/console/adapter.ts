@@ -23,6 +23,7 @@ import {
   platformIdFor,
   speakerOf,
 } from './chat.js';
+import { type OnecliEndpoint, connectedAccountsRoute, onecliEndpointFromEnv } from './connected-accounts.js';
 import { onAgentGroupsChanged } from './create-agent.js';
 import { groupChatMembers, groupChatsRoute } from './group-chats.js';
 import {
@@ -42,6 +43,7 @@ import { newAgentRoute } from './new-agent.js';
 import { noticeFor } from './notify.js';
 import { panelRoute } from './panel.js';
 import { cardOf } from './questions.js';
+import { sendBytes } from './range.js';
 import { settingsRoute } from './settings.js';
 import { serveStatic } from './static.js';
 import { type ChatMessage, ConsoleStore, type NewFile } from './store.js';
@@ -51,21 +53,13 @@ export interface ConsoleOptions {
   port: number;
   dataDir: string;
   distDir: string;
+  /** Set only when the Install's Gateway is OneCLI. */
+  onecli?: OnecliEndpoint | null;
 }
 
 export interface ConsoleAdapter extends ChannelAdapter {
   url(): string;
 }
-
-const ROUTES: Route[] = [
-  answersRoute,
-  inboxRoute,
-  readRoute,
-  panelRoute,
-  newAgentRoute,
-  settingsRoute,
-  groupChatsRoute,
-];
 
 export function consoleAdapterFromEnv(env: Record<string, string | undefined>): ConsoleAdapter | null {
   if (!env.CONSOLE_PORT) return null;
@@ -74,10 +68,26 @@ export function consoleAdapterFromEnv(env: Record<string, string | undefined>): 
     log.warn('Console disabled: CONSOLE_PORT is not a valid port', { CONSOLE_PORT: env.CONSOLE_PORT });
     return null;
   }
-  return createConsoleAdapter({ port, dataDir: DATA_DIR, distDir: path.resolve(process.cwd(), 'web', 'dist') });
+  return createConsoleAdapter({
+    port,
+    dataDir: DATA_DIR,
+    distDir: path.resolve(process.cwd(), 'web', 'dist'),
+    onecli: onecliEndpointFromEnv(env),
+  });
 }
 
 export function createConsoleAdapter(opts: ConsoleOptions): ConsoleAdapter {
+  const onecli = opts.onecli ?? null;
+  const routes: Route[] = [
+    answersRoute,
+    inboxRoute,
+    readRoute,
+    panelRoute,
+    newAgentRoute,
+    settingsRoute({ connectedAccounts: onecli !== null }),
+    connectedAccountsRoute(onecli),
+    groupChatsRoute,
+  ];
   let server: http.Server | null = null;
   let store: ConsoleStore | null = null;
   let setupConfig: ChannelSetup | null = null;
@@ -191,14 +201,13 @@ export function createConsoleAdapter(opts: ConsoleOptions): ConsoleAdapter {
     if (file) {
       const stored = store!.getFile(decodeURIComponent(file[1]));
       if (!stored) throw new HttpError(404, 'unknown file');
-      res.writeHead(200, {
+      sendBytes(req, res, stored.data, {
         'content-type': stored.mimeType,
         'content-disposition': `inline; filename*=UTF-8''${encodeURIComponent(stored.name)}`,
         'x-content-type-options': 'nosniff',
         // Chrome's PDF viewer refuses to render inside a sandboxed document.
         ...(stored.mimeType !== 'application/pdf' && { 'content-security-policy': 'sandbox' }),
       });
-      res.end(stored.data);
       return;
     }
 
@@ -227,7 +236,7 @@ export function createConsoleAdapter(opts: ConsoleOptions): ConsoleAdapter {
       onAction: (...args) => setupConfig!.onAction(...args),
       activityOf: (chatId, agentGroupId) => activity.get(chatId, agentGroupId),
     };
-    for (const answerRoute of ROUTES) {
+    for (const answerRoute of routes) {
       const response = await answerRoute(route, ctx);
       if (response) return sendJson(res, response.status, response.body);
     }
