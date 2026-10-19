@@ -1,0 +1,5 @@
+interface:
+  display_name: "Tackle"
+  short_description: "Carry a ticket from implementation to merge"
+policy:
+  allow_implicit_invocation: false
