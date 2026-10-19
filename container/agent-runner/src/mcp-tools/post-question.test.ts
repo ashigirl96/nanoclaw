@@ -89,37 +89,15 @@ describe('post_question in a Console session', () => {
 describe('post_question outside the Console', () => {
   beforeEach(() => bindSession('slack', 'slack:C1'));
 
-  it('sends the options as lettered lines of text', async () => {
+  it('refuses and points to ask_user_question without sending anything', async () => {
     const result = await postQuestion.handler({
       title: 'Lunch',
       question: 'Where should we eat?',
       options: ['Sushi', 'Ramen'],
     });
 
-    expect(result.isError).not.toBe(true);
-    const row = written();
-    expect(row).toMatchObject({ kind: 'chat', channel_type: 'slack', platform_id: 'slack:C1' });
-    expect(row.content.text).toBe('*Lunch*\nWhere should we eat?\n\nA. Sushi\nB. Ramen');
-  });
-
-  it('sends a form as a list of the fields to fill in', async () => {
-    await postQuestion.handler({
-      title: 'Order',
-      question: 'What do you want?',
-      fields: [
-        { id: 'name', label: 'Name', type: 'text' },
-        { id: 'size', label: 'Size', type: 'select', options: ['S', 'M'] },
-        { id: 'toppings', label: 'Toppings', type: 'multi_select', options: ['Egg', 'Nori'] },
-        { id: 'when', label: 'When', type: 'date' },
-      ],
-    });
-
-    expect(written().content.text).toBe(
-      '*Order*\nWhat do you want?\n\n' +
-        '- Name\n' +
-        '- Size (one of: S / M)\n' +
-        '- Toppings (any of: Egg / Nori)\n' +
-        '- When (date, YYYY-MM-DD)',
-    );
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain('ask_user_question');
+    expect(getUndeliveredMessages()).toHaveLength(0);
   });
 });

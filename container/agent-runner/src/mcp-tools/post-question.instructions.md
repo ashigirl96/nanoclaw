@@ -8,6 +8,6 @@ Give exactly one of:
 
 The answer arrives as an ordinary chat message from the user that starts with `「<title> — <question>」への答え:`, followed by the picked option, or one `<label>: <value>` line per form field. Match it to the Question by that title and question, so give each open Question a distinct title.
 
-In the Console the Question shows as a card with buttons or form inputs. In any other chat it is sent as plain text (options lettered A, B, C…; form fields as a list), and the user answers in a normal reply.
+It works only in Console chats, where the Question shows as a card with buttons or form inputs. In any other chat it refuses; use `ask_user_question` there.
 
 Use `ask_user_question` instead when you cannot continue the current task without the answer.

@@ -88,21 +88,6 @@ function parseAnswerable(args: Record<string, unknown>): Answerable | string {
   return typeof fields === 'string' ? fields : { fields };
 }
 
-function fieldLine(field: Field): string {
-  if (field.type === 'select') return `- ${field.label} (one of: ${field.options!.join(' / ')})`;
-  if (field.type === 'multi_select') return `- ${field.label} (any of: ${field.options!.join(' / ')})`;
-  if (field.type === 'date') return `- ${field.label} (date, YYYY-MM-DD)`;
-  return `- ${field.label}`;
-}
-
-function asText(title: string, question: string, answerable: Answerable): string {
-  const lines =
-    'options' in answerable
-      ? answerable.options.map((o, i) => `${String.fromCharCode(65 + (i % 26))}. ${o.label}`)
-      : answerable.fields.map(fieldLine);
-  return `*${title}*\n${question}\n\n${lines.join('\n')}`;
-}
-
 function routing() {
   const session = getSessionRouting();
   const thread =
@@ -142,7 +127,7 @@ export const postQuestion: McpToolDefinition = {
   tool: {
     name: 'post_question',
     description:
-      'Post a Question to the user and return at once, without waiting. Give either options (the user picks one) or fields (a form with text, textarea, select, multi_select or date inputs). The answer arrives later, possibly days later, as an ordinary chat message from the user that starts with 「<title> — <question>」への答え.',
+      'Console chats only: in any other chat use ask_user_question. Post a Question to the user and return at once, without waiting. Give either options (the user picks one) or fields (a form with text, textarea, select, multi_select or date inputs). The answer arrives later, possibly days later, as an ordinary chat message from the user that starts with 「<title> — <question>」への答え.',
     inputSchema: {
       type: 'object' as const,
       properties: {
@@ -159,6 +144,10 @@ export const postQuestion: McpToolDefinition = {
     },
   },
   async handler(args) {
+    const r = routing();
+    if (r.channel_type !== CONSOLE_CHANNEL) {
+      return err('post_question only works in Console chats; use ask_user_question here');
+    }
     const title = typeof args.title === 'string' ? args.title : '';
     const question = typeof args.question === 'string' ? args.question : '';
     if (!title || !question) return err('title and question are required');
@@ -166,25 +155,17 @@ export const postQuestion: McpToolDefinition = {
     if (typeof answerable === 'string') return err(answerable);
 
     const id = generateId();
-    const r = routing();
-    const onConsole = r.channel_type === CONSOLE_CHANNEL;
     await writeMessageOut({
       id,
-      kind: onConsole ? 'chat-sdk' : 'chat',
+      kind: 'chat-sdk',
       platform_id: r.platform_id,
       channel_type: r.channel_type,
       thread_id: r.thread_id,
-      content: JSON.stringify(
-        onConsole
-          ? { type: 'post_question', questionId: id, title, question, ...answerable }
-          : { text: asText(title, question, answerable) },
-      ),
+      content: JSON.stringify({ type: 'post_question', questionId: id, title, question, ...answerable }),
     });
 
     return ok(
-      onConsole
-        ? `Question posted (id: ${id}). Do not wait for it: the answer arrives later as a chat message from the user that starts with 「${title} — ${question}」への答え.`
-        : `Question sent as text (id: ${id}); this chat has no Question cards. The user answers in an ordinary reply.`,
+      `Question posted (id: ${id}). Do not wait for it: the answer arrives later as a chat message from the user that starts with 「${title} — ${question}」への答え.`,
     );
   },
 };
