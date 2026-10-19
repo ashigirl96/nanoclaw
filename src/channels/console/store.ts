@@ -63,6 +63,10 @@ const MIGRATIONS = [
      data BLOB NOT NULL
    );
    CREATE INDEX files_by_message ON files (message_id);`,
+  `CREATE TABLE read_positions (
+     agent_group_id TEXT PRIMARY KEY,
+     last_read_seq INTEGER NOT NULL
+   );`,
 ];
 
 function newId(prefix: string): string {
@@ -135,6 +139,32 @@ export class ConsoleStore {
       .prepare('UPDATE messages SET reactions = ? WHERE id = ?')
       .run(JSON.stringify([...message.reactions, emoji]), id);
     return this.getMessage(id);
+  }
+
+  /** Moves the Owner's read position in this Chat up to `messageId`; false when the id is not in this Chat. */
+  markRead(agentGroupId: string, messageId: string): boolean {
+    const row = this.db
+      .prepare('SELECT seq FROM messages WHERE id = ? AND agent_group_id = ?')
+      .get(messageId, agentGroupId) as { seq: number } | undefined;
+    if (!row) return false;
+    this.db
+      .prepare(
+        `INSERT INTO read_positions (agent_group_id, last_read_seq) VALUES (?, ?)
+         ON CONFLICT (agent_group_id) DO UPDATE SET last_read_seq = MAX(last_read_seq, excluded.last_read_seq)`,
+      )
+      .run(agentGroupId, row.seq);
+    return true;
+  }
+
+  unreadCount(agentGroupId: string): number {
+    const row = this.db
+      .prepare(
+        `SELECT COUNT(*) AS n FROM messages
+          WHERE agent_group_id = ? AND role = 'agent'
+            AND seq > COALESCE((SELECT last_read_seq FROM read_positions WHERE agent_group_id = ?), 0)`,
+      )
+      .get(agentGroupId, agentGroupId) as { n: number };
+    return row.n;
   }
 
   getFile(id: string): (StoredFile & { data: Buffer }) | null {

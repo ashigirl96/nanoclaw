@@ -21,7 +21,8 @@ import { type ChatMessage, ConsoleStore, type NewFile } from './store.js';
 
 type ConsoleEvent =
   | { type: 'message'; message: ChatMessage }
-  | { type: 'activity'; agentGroupId: string; activity: Activity };
+  | { type: 'activity'; agentGroupId: string; activity: Activity }
+  | { type: 'unread'; agentGroupId: string; unread: number };
 
 export interface ConsoleOptions {
   port: number;
@@ -66,6 +67,12 @@ export function createConsoleAdapter(opts: ConsoleOptions): ConsoleAdapter {
   function broadcast(event: ConsoleEvent): void {
     const frame = `data: ${JSON.stringify(event)}\n\n`;
     for (const res of subscribers) res.write(frame);
+  }
+
+  function broadcastUnread(agentGroupId: string): number {
+    const unread = store!.unreadCount(agentGroupId);
+    broadcast({ type: 'unread', agentGroupId, unread });
+    return unread;
   }
 
   function subscribe(req: http.IncomingMessage, res: http.ServerResponse): void {
@@ -130,6 +137,7 @@ export function createConsoleAdapter(opts: ConsoleOptions): ConsoleAdapter {
           name: g.name,
           lastMessage: store!.lastMessage(g.id),
           activity: activity.get(g.id),
+          unread: store!.unreadCount(g.id),
         })),
       );
     }
@@ -149,7 +157,7 @@ export function createConsoleAdapter(opts: ConsoleOptions): ConsoleAdapter {
       return;
     }
 
-    const chat = /^(GET|POST) \/api\/agent-groups\/([^/]+)\/(open|messages)$/.exec(route);
+    const chat = /^(GET|POST) \/api\/agent-groups\/([^/]+)\/(open|messages|read)$/.exec(route);
     if (chat) {
       const [, method, rawId, action] = chat;
       const agentGroupId = await requireAgentGroup(decodeURIComponent(rawId));
@@ -162,6 +170,13 @@ export function createConsoleAdapter(opts: ConsoleOptions): ConsoleAdapter {
       }
       if (method === 'POST' && action === 'messages') {
         return sendJson(res, 200, await sendFromOwner(agentGroupId, await readJson(req)));
+      }
+      if (method === 'POST' && action === 'read') {
+        const { messageId } = await readJson(req);
+        if (typeof messageId !== 'string' || !store!.markRead(agentGroupId, messageId)) {
+          throw new HttpError(404, 'unknown message in this Chat');
+        }
+        return sendJson(res, 200, { unread: broadcastUnread(agentGroupId) });
       }
     }
 
@@ -246,6 +261,7 @@ export function createConsoleAdapter(opts: ConsoleOptions): ConsoleAdapter {
       }));
       const stored = store.addMessage({ agentGroupId, role: 'agent', text: textOf(content), files });
       broadcast({ type: 'message', message: stored });
+      broadcastUnread(agentGroupId);
       activity.clear(agentGroupId);
       return stored.id;
     },

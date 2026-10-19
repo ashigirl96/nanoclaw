@@ -16,6 +16,8 @@ export interface Harness {
 
 export interface EventStream {
   next(count: number): Promise<unknown[]>;
+  /** The next `count` events of one type, skipping the others. */
+  ofType(type: string, count: number): Promise<unknown[]>;
   close(): void;
 }
 
@@ -91,7 +93,7 @@ async function openEvents(baseUrl: string): Promise<EventStream> {
   const decoder = new TextDecoder();
   let buffer = '';
   const received: unknown[] = [];
-  return {
+  const stream: EventStream = {
     async next(count: number): Promise<unknown[]> {
       while (received.length < count) {
         const { value, done } = await reader.read();
@@ -111,6 +113,16 @@ async function openEvents(baseUrl: string): Promise<EventStream> {
       }
       return received.splice(0, count);
     },
+    async ofType(type: string, count: number): Promise<unknown[]> {
+      const matched: unknown[] = [];
+      while (matched.length < count) {
+        const [event] = await stream.next(1);
+        if (event === undefined) break;
+        if ((event as { type: string }).type === type) matched.push(event);
+      }
+      return matched;
+    },
     close: () => controller.abort(),
   };
+  return stream;
 }

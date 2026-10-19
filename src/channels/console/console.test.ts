@@ -278,7 +278,8 @@ describe('delivering Outbound Messages', () => {
       content: { operation: 'edit', messageId: id, text: 'two' },
     });
 
-    expect(await events.next(2)).toEqual([
+    const messages = (await events.next(3)).filter((e) => (e as { type: string }).type === 'message');
+    expect(messages).toEqual([
       expect.objectContaining({ type: 'message', message: expect.objectContaining({ id, text: 'one' }) }),
       expect.objectContaining({ type: 'message', message: expect.objectContaining({ id, text: 'two' }) }),
     ]);

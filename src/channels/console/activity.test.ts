@@ -64,7 +64,7 @@ describe('working indicator', () => {
 
     await h.adapter.setTyping!('web:ag-a', null);
 
-    expect(await events.next(1)).toEqual([
+    expect(await events.ofType('activity', 1)).toEqual([
       { type: 'activity', agentGroupId: 'ag-a', activity: { working: true, tool: null } },
     ]);
     const groups = await h.api<Summary[]>('/api/agent-groups');
@@ -81,7 +81,7 @@ describe('working indicator', () => {
 
     await h.adapter.setTyping!('web:ag-a', null);
 
-    expect(await events.next(1)).toEqual([
+    expect(await events.ofType('activity', 1)).toEqual([
       { type: 'activity', agentGroupId: 'ag-a', activity: { working: true, tool: 'WebSearch' } },
     ]);
     events.close();
@@ -93,8 +93,8 @@ describe('working indicator', () => {
 
     await h.adapter.deliver('web:ag-a', null, { kind: 'chat', content: { text: 'done' } });
 
-    const activities = (await events.next(3)).filter((e) => (e as { type: string }).type === 'activity');
-    expect(activities.at(-1)).toEqual({
+    const activities = await events.ofType('activity', 2);
+    expect(activities[1]).toEqual({
       type: 'activity',
       agentGroupId: 'ag-a',
       activity: { working: false, tool: null },
