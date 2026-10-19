@@ -208,7 +208,8 @@ export function createConsoleAdapter(opts: ConsoleOptions): ConsoleAdapter {
         server!.once('error', reject);
         server!.listen(opts.port, '127.0.0.1', () => resolve());
       });
-      log.info('Console listening', { url: this.url() });
+      const { port } = server!.address() as AddressInfo;
+      log.info('Console listening', { url: `http://${CONSOLE_HOSTNAME}:${port}` });
     },
 
     async teardown(): Promise<void> {
@@ -296,10 +297,13 @@ export function createConsoleAdapter(opts: ConsoleOptions): ConsoleAdapter {
   } satisfies ConsoleAdapter;
 }
 
+// Browsers resolve *.localhost to loopback themselves, so DNS rebinding cannot reach this name.
+const CONSOLE_HOSTNAME = 'nanoclaw.localhost';
+
 function isLocalHost(host: string | undefined): boolean {
   if (!host) return false;
   const hostname = host.replace(/:\d+$/, '');
-  return hostname === '127.0.0.1' || hostname === 'localhost' || hostname === '[::1]';
+  return hostname === CONSOLE_HOSTNAME || hostname === '127.0.0.1' || hostname === 'localhost' || hostname === '[::1]';
 }
 
 function parseUploads(raw: unknown): NewFile[] {
