@@ -36,6 +36,7 @@ import { newAgentRoute } from './new-agent.js';
 import { noticeFor } from './notify.js';
 import { panelRoute } from './panel.js';
 import { cardOf } from './questions.js';
+import { sendBytes } from './range.js';
 import { settingsRoute } from './settings.js';
 import { serveStatic } from './static.js';
 import { type ChatMessage, ConsoleStore, type NewFile } from './store.js';
@@ -159,14 +160,13 @@ export function createConsoleAdapter(opts: ConsoleOptions): ConsoleAdapter {
     if (file) {
       const stored = store!.getFile(decodeURIComponent(file[1]));
       if (!stored) throw new HttpError(404, 'unknown file');
-      res.writeHead(200, {
+      sendBytes(req, res, stored.data, {
         'content-type': stored.mimeType,
         'content-disposition': `inline; filename*=UTF-8''${encodeURIComponent(stored.name)}`,
         'x-content-type-options': 'nosniff',
         // Chrome's PDF viewer refuses to render inside a sandboxed document.
         ...(stored.mimeType !== 'application/pdf' && { 'content-security-policy': 'sandbox' }),
       });
-      res.end(stored.data);
       return;
     }
 
