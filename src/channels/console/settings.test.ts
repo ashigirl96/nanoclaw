@@ -19,6 +19,6 @@ afterEach(async () => {
 
 describe('Console settings', () => {
   it('tells the browser the install timezone to show times in', async () => {
-    expect(await h.api('/api/settings')).toEqual({ timezone: 'Asia/Tokyo' });
+    expect(await h.api('/api/settings')).toEqual({ timezone: 'Asia/Tokyo', connectedAccounts: false });
   });
 });

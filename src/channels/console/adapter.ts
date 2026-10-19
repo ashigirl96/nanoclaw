@@ -20,6 +20,7 @@ import {
   platformIdFor,
   storeKeyOf,
 } from './chat.js';
+import { type OnecliEndpoint, connectedAccountsRoute, onecliEndpointFromEnv } from './connected-accounts.js';
 import { onAgentGroupsChanged } from './create-agent.js';
 import {
   type ConsoleEvent,
@@ -47,21 +48,13 @@ export interface ConsoleOptions {
   port: number;
   dataDir: string;
   distDir: string;
+  /** Set only when the Install's Gateway is OneCLI. */
+  onecli?: OnecliEndpoint | null;
 }
 
 export interface ConsoleAdapter extends ChannelAdapter {
   url(): string;
 }
-
-const ROUTES: Route[] = [
-  appearanceRoute,
-  answersRoute,
-  inboxRoute,
-  readRoute,
-  panelRoute,
-  newAgentRoute,
-  settingsRoute,
-];
 
 export function consoleAdapterFromEnv(env: Record<string, string | undefined>): ConsoleAdapter | null {
   if (!env.CONSOLE_PORT) return null;
@@ -70,10 +63,26 @@ export function consoleAdapterFromEnv(env: Record<string, string | undefined>): 
     log.warn('Console disabled: CONSOLE_PORT is not a valid port', { CONSOLE_PORT: env.CONSOLE_PORT });
     return null;
   }
-  return createConsoleAdapter({ port, dataDir: DATA_DIR, distDir: path.resolve(process.cwd(), 'web', 'dist') });
+  return createConsoleAdapter({
+    port,
+    dataDir: DATA_DIR,
+    distDir: path.resolve(process.cwd(), 'web', 'dist'),
+    onecli: onecliEndpointFromEnv(env),
+  });
 }
 
 export function createConsoleAdapter(opts: ConsoleOptions): ConsoleAdapter {
+  const onecli = opts.onecli ?? null;
+  const routes: Route[] = [
+    appearanceRoute,
+    answersRoute,
+    inboxRoute,
+    readRoute,
+    panelRoute,
+    newAgentRoute,
+    settingsRoute({ connectedAccounts: onecli !== null }),
+    connectedAccountsRoute(onecli),
+  ];
   let server: http.Server | null = null;
   let store: ConsoleStore | null = null;
   let slackAvatars: SlackAvatars | null = null;
@@ -157,7 +166,7 @@ export function createConsoleAdapter(opts: ConsoleOptions): ConsoleAdapter {
     if (file) {
       const stored = store!.getFile(decodeURIComponent(file[1]));
       if (!stored) throw new HttpError(404, 'unknown file');
-      return sendStoredBytes(res, stored.mimeType, stored.data, {
+      return sendStoredBytes(req, res, stored.mimeType, stored.data, {
         'content-disposition': `inline; filename*=UTF-8''${encodeURIComponent(stored.name)}`,
       });
     }
@@ -168,7 +177,7 @@ export function createConsoleAdapter(opts: ConsoleOptions): ConsoleAdapter {
       if (!image) throw new HttpError(404, 'no avatar');
       // A changed Avatar gets a new URL, so only the URL of the version being served may be cached for good.
       const current = url.searchParams.get('v') === image.version;
-      return sendStoredBytes(res, image.mimeType, image.data, {
+      return sendStoredBytes(req, res, image.mimeType, image.data, {
         'cache-control': current ? 'private, max-age=31536000, immutable' : 'no-cache',
       });
     }
@@ -197,7 +206,7 @@ export function createConsoleAdapter(opts: ConsoleOptions): ConsoleAdapter {
       sendFromOwner,
       onAction: (...args) => setupConfig!.onAction(...args),
     };
-    for (const answerRoute of ROUTES) {
+    for (const answerRoute of routes) {
       const response = await answerRoute(route, ctx);
       if (response) return sendJson(res, response.status, response.body);
     }

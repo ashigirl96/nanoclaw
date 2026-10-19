@@ -4,6 +4,7 @@ import { getAgentGroup } from '../../db/agent-groups.js';
 import type { ChannelSetup } from '../adapter.js';
 import type { Activity } from './activity.js';
 import type { Notice } from './notify.js';
+import { sendBytes } from './range.js';
 import type { SlackAvatars } from './slack-avatar.js';
 import type { ChatMessage, ConsoleStore } from './store.js';
 
@@ -58,19 +59,19 @@ export function sendJson(res: http.ServerResponse, status: number, body: unknown
 
 /** Sends stored bytes under the type they were stored with, never as a document that can run script. */
 export function sendStoredBytes(
+  req: http.IncomingMessage,
   res: http.ServerResponse,
   mimeType: string,
   data: Buffer,
   headers: http.OutgoingHttpHeaders = {},
 ): void {
-  res.writeHead(200, {
+  sendBytes(req, res, data, {
     'content-type': mimeType,
     'x-content-type-options': 'nosniff',
     // Chrome's PDF viewer refuses to render inside a sandboxed document.
     ...(mimeType !== 'application/pdf' && { 'content-security-policy': 'sandbox' }),
     ...headers,
   });
-  res.end(data);
 }
 
 export async function readJson(req: http.IncomingMessage): Promise<Record<string, unknown>> {

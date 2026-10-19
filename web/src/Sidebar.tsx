@@ -2,19 +2,33 @@ import { useState } from 'react';
 
 import type { AgentGroupSummary, ChatMessage } from './api';
 import { Avatar } from './Avatar';
-import { InboxIcon, PlusIcon, SearchIcon } from './Icons';
+import { InboxIcon, LinkIcon, PlusIcon, SearchIcon } from './Icons';
 
 interface Props {
   groups: AgentGroupSummary[];
   selected: string | null;
   inboxSelected: boolean;
   inboxWaiting: number;
+  accountsVisible: boolean;
+  accountsSelected: boolean;
   onSelect: (id: string) => void;
   onSelectInbox: () => void;
+  onSelectAccounts: () => void;
   onNewAgent: () => void;
 }
 
-export function Sidebar({ groups, selected, inboxSelected, inboxWaiting, onSelect, onSelectInbox, onNewAgent }: Props) {
+export function Sidebar({
+  groups,
+  selected,
+  inboxSelected,
+  inboxWaiting,
+  accountsVisible,
+  accountsSelected,
+  onSelect,
+  onSelectInbox,
+  onSelectAccounts,
+  onNewAgent,
+}: Props) {
   const [searching, setSearching] = useState(false);
   const [query, setQuery] = useState('');
   const needle = query.trim().toLowerCase();
@@ -72,6 +86,19 @@ export function Sidebar({ groups, selected, inboxSelected, inboxWaiting, onSelec
                   {inboxWaiting}
                 </span>
               )}
+            </button>
+          </li>
+        )}
+        {!needle && accountsVisible && (
+          <li>
+            <button type="button" className={accountsSelected ? 'group selected' : 'group'} onClick={onSelectAccounts}>
+              <span className="avatar md inbox-avatar" aria-hidden="true">
+                <LinkIcon />
+              </span>
+              <span className="group-text">
+                <span className="group-name">Connected Accounts</span>
+                <span className="group-excerpt">OneCLI につないだアカウント</span>
+              </span>
             </button>
           </li>
         )}

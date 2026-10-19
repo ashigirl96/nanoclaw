@@ -127,6 +127,14 @@ export interface Template {
   description: string;
 }
 
+export interface ConnectedApp {
+  provider: string;
+  name: string;
+  /** The OneCLI dashboard page that starts connecting this app. */
+  connectUrl: string;
+  accounts: Array<{ label: string; status: string; connectedAt: string | null }>;
+}
+
 export type CreateAgentOutcome = { status: 'created'; agentGroup: { id: string; name: string } } | { status: 'held' };
 
 export type ConsoleEvent =
@@ -192,7 +200,8 @@ export const api = {
       body: JSON.stringify({ messageId }),
     }),
   inbox: () => request<ChatMessage[]>('/api/inbox'),
-  settings: () => request<{ timezone: string }>('/api/settings'),
+  settings: () => request<{ timezone: string; connectedAccounts: boolean }>('/api/settings'),
+  connectedAccounts: () => request<{ apps: ConnectedApp[] }>('/api/connected-accounts'),
   answer: (messageId: string, value: string) =>
     request<ChatMessage>(`/api/messages/${encodeURIComponent(messageId)}/answer`, {
       method: 'POST',
