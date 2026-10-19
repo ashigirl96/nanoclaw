@@ -336,3 +336,17 @@ launchctl kickstart -k gui/$(id -u)/com.nanoclaw   # macOS
 ```
 
 `container/build.sh` reads `INSTALL_CJK_FONTS` from `.env` and passes it through as a Docker build-arg. Without CJK fonts, Chromium-rendered screenshots and PDFs containing CJK text show tofu (empty rectangles) instead of characters.
+
+## Agent skills
+
+### Issue tracker
+
+issue は GitHub の `ashigirl96/nanoclaw`（origin）の Issues に置き、upstream には出さない。`docs/agents/issue-tracker.md` を参照。
+
+### Triage labels
+
+既定の 5 role の label（`needs-triage`、`needs-info`、`ready-for-agent`、`ready-for-human`、`wontfix`）をそのまま使う。`docs/agents/triage-labels.md` を参照。
+
+### Domain docs
+
+single-context。root の `GLOSSARY.md` と `docs/adr/` を使う。`docs/agents/domain.md` を参照。
