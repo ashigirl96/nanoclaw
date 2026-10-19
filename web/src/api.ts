@@ -167,6 +167,7 @@ export const api = {
       body: JSON.stringify({ messageId }),
     }),
   inbox: () => request<ChatMessage[]>('/api/inbox'),
+  settings: () => request<{ timezone: string }>('/api/settings'),
   answer: (messageId: string, value: string) =>
     request<ChatMessage>(`/api/messages/${encodeURIComponent(messageId)}/answer`, {
       method: 'POST',

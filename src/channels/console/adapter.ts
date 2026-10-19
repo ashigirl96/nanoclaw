@@ -35,6 +35,7 @@ import { newAgentRoute } from './new-agent.js';
 import { noticeFor } from './notify.js';
 import { panelRoute } from './panel.js';
 import { cardOf } from './questions.js';
+import { settingsRoute } from './settings.js';
 import { serveStatic } from './static.js';
 import { type ChatMessage, ConsoleStore, type NewFile } from './store.js';
 import { broadcastUnread, readRoute } from './unread.js';
@@ -49,7 +50,7 @@ export interface ConsoleAdapter extends ChannelAdapter {
   url(): string;
 }
 
-const ROUTES: Route[] = [answersRoute, inboxRoute, readRoute, panelRoute, newAgentRoute];
+const ROUTES: Route[] = [answersRoute, inboxRoute, readRoute, panelRoute, newAgentRoute, settingsRoute];
 
 export function consoleAdapterFromEnv(env: Record<string, string | undefined>): ConsoleAdapter | null {
   if (!env.CONSOLE_PORT) return null;

@@ -7,6 +7,7 @@ import { NewAgentDialog } from './NewAgentDialog';
 import { announce, isForeground, useForeground, useNotificationPermission } from './notifications';
 import { Panel } from './Panel';
 import { Sidebar } from './Sidebar';
+import { TimezoneContext } from './time';
 
 type View = { kind: 'inbox' } | { kind: 'chat'; agentGroupId: string } | null;
 
@@ -23,11 +24,16 @@ export function App() {
   const [inbox, setInbox] = useState<ChatMessage[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
+  const [timezone, setTimezone] = useState<string | undefined>(undefined);
   const selected = view?.kind === 'chat' ? view.agentGroupId : null;
 
   useEffect(() => {
     api.agentGroups().then(setGroups, (err: Error) => setError(err.message));
     api.inbox().then(setInbox, (err: Error) => setError(err.message));
+    api.settings().then(
+      (s) => setTimezone(s.timezone),
+      (err: Error) => setError(err.message),
+    );
     const onPop = () => setView(viewFromPath());
     window.addEventListener('popstate', onPop);
     return () => window.removeEventListener('popstate', onPop);
@@ -100,39 +106,41 @@ export function App() {
   );
 
   return (
-    <div className={current ? 'layout with-panel' : 'layout'}>
-      <Sidebar
-        groups={groups}
-        selected={selected}
-        inboxSelected={view?.kind === 'inbox'}
-        inboxWaiting={waiting}
-        onSelect={(id) => navigate({ kind: 'chat', agentGroupId: id })}
-        onSelectInbox={() => navigate({ kind: 'inbox' })}
-        onNewAgent={() => setCreating(true)}
-      />
-      {creating && <NewAgentDialog onCreated={(id) => void created(id)} onClose={() => setCreating(false)} />}
-      <main className="main">
-        {error && (
-          <div className="error" role="alert" onClick={() => setError(null)}>
-            {error}
-          </div>
-        )}
-        {view?.kind === 'inbox' ? (
-          <Inbox messages={inbox} onUpdated={(m) => setInbox((prev) => upsert(prev, m))} onError={setError} />
-        ) : current ? (
-          <Chat
-            key={current.id}
-            group={current}
-            messages={messages}
-            onSent={(m) => setMessages((prev) => upsert(prev, m))}
-            onError={setError}
-          />
-        ) : (
-          <div className="empty">左の一覧から Agent を選んでください。</div>
-        )}
-      </main>
-      {current && <Panel key={current.id} agentGroupId={current.id} revision={messages.length} onError={setError} />}
-    </div>
+    <TimezoneContext.Provider value={timezone}>
+      <div className={current ? 'layout with-panel' : 'layout'}>
+        <Sidebar
+          groups={groups}
+          selected={selected}
+          inboxSelected={view?.kind === 'inbox'}
+          inboxWaiting={waiting}
+          onSelect={(id) => navigate({ kind: 'chat', agentGroupId: id })}
+          onSelectInbox={() => navigate({ kind: 'inbox' })}
+          onNewAgent={() => setCreating(true)}
+        />
+        {creating && <NewAgentDialog onCreated={(id) => void created(id)} onClose={() => setCreating(false)} />}
+        <main className="main">
+          {error && (
+            <div className="error" role="alert" onClick={() => setError(null)}>
+              {error}
+            </div>
+          )}
+          {view?.kind === 'inbox' ? (
+            <Inbox messages={inbox} onUpdated={(m) => setInbox((prev) => upsert(prev, m))} onError={setError} />
+          ) : current ? (
+            <Chat
+              key={current.id}
+              group={current}
+              messages={messages}
+              onSent={(m) => setMessages((prev) => upsert(prev, m))}
+              onError={setError}
+            />
+          ) : (
+            <div className="empty">左の一覧から Agent を選んでください。</div>
+          )}
+        </main>
+        {current && <Panel key={current.id} agentGroupId={current.id} revision={messages.length} onError={setError} />}
+      </div>
+    </TimezoneContext.Provider>
   );
 }
 

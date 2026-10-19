@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 
 import { type AgentGroupDetails, type LibraryFile, type TaskSummary, api } from './api';
 import { FilePreview } from './FilePreview';
+import { useFormatTime } from './time';
 import './panel.css';
 
 type Tab = 'details' | 'library' | 'tasks';
@@ -63,6 +64,7 @@ function useLoad<T>(load: () => Promise<T>, deps: unknown[], onError: (message: 
 
 function Details({ agentGroupId, onError }: { agentGroupId: string; onError: (m: string) => void }) {
   const details = useLoad<AgentGroupDetails>(() => api.details(agentGroupId), [agentGroupId], onError);
+  const formatTime = useFormatTime();
   if (!details) return <p className="panel-note">読み込み中…</p>;
   return (
     <dl className="details">
@@ -77,7 +79,7 @@ function Details({ agentGroupId, onError }: { agentGroupId: string; onError: (m:
         <code>groups/{details.folder}</code>
       </dd>
       <dt>作成</dt>
-      <dd>{new Date(details.createdAt).toLocaleString()}</dd>
+      <dd>{formatTime(details.createdAt)}</dd>
     </dl>
   );
 }
@@ -93,6 +95,7 @@ function Library({
 }) {
   const files = useLoad<LibraryFile[]>(() => api.library(agentGroupId), [agentGroupId, revision], onError);
   const [open, setOpen] = useState<string | null>(null);
+  const formatTime = useFormatTime();
   if (!files) return <p className="panel-note">読み込み中…</p>;
   if (files.length === 0) return <p className="panel-note">この Agent が届けたファイルはまだありません。</p>;
   return (
@@ -101,7 +104,7 @@ function Library({
         <li key={f.id}>
           <button type="button" className="library-item" onClick={() => setOpen(open === f.id ? null : f.id)}>
             <span className="library-name">{f.name}</span>
-            <span className="library-date">{new Date(f.createdAt).toLocaleString()}</span>
+            <span className="library-date">{formatTime(f.createdAt)}</span>
           </button>
           {open === f.id && <FilePreview file={f} />}
         </li>
@@ -112,6 +115,7 @@ function Library({
 
 function Tasks({ agentGroupId, onError }: { agentGroupId: string; onError: (m: string) => void }) {
   const tasks = useLoad<TaskSummary[]>(() => api.tasks(agentGroupId), [agentGroupId], onError);
+  const formatTime = useFormatTime();
   if (!tasks) return <p className="panel-note">読み込み中…</p>;
   if (tasks.length === 0) return <p className="panel-note">この Agent の Task はありません。</p>;
   return (
@@ -126,10 +130,10 @@ function Tasks({ agentGroupId, onError }: { agentGroupId: string; onError: (m: s
               {t.status === 'paused' && <span className="badge">停止中</span>}
             </dd>
             <dt>次回</dt>
-            <dd>{t.nextOccurrence ? new Date(t.nextOccurrence).toLocaleString() : '—'}</dd>
+            <dd>{t.nextOccurrence ? formatTime(t.nextOccurrence) : '—'}</dd>
             <dt>最後</dt>
             <dd>
-              {t.lastOccurrence ? new Date(t.lastOccurrence).toLocaleString() : 'まだ動いていません'}
+              {t.lastOccurrence ? formatTime(t.lastOccurrence) : 'まだ動いていません'}
               {t.occurrences > 0 && `（${t.occurrences} 回）`}
               {t.failedOccurrences > 0 && <span className="badge danger">失敗 {t.failedOccurrences}</span>}
             </dd>

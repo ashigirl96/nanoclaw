@@ -3,6 +3,7 @@ import { type FormEvent, type KeyboardEvent, useEffect, useRef, useState } from 
 import { type AgentGroupSummary, type ChatMessage, type Upload, api, readUpload } from './api';
 import { CardView } from './Card';
 import { FilePreview } from './FilePreview';
+import { useFormatTime } from './time';
 
 interface Props {
   group: AgentGroupSummary;
@@ -16,6 +17,7 @@ export function Chat({ group, messages, onSent, onError }: Props) {
   const [uploads, setUploads] = useState<Upload[]>([]);
   const [sending, setSending] = useState(false);
   const bottom = useRef<HTMLDivElement>(null);
+  const formatTime = useFormatTime();
 
   useEffect(() => {
     bottom.current?.scrollIntoView({ block: 'end' });
@@ -65,7 +67,7 @@ export function Chat({ group, messages, onSent, onError }: Props) {
               <FilePreview key={f.id} file={f} />
             ))}
             <footer className="message-meta">
-              {new Date(m.createdAt).toLocaleString()}
+              {formatTime(m.createdAt)}
               {m.editedAt && ' (編集済み)'}
               {m.reactions.length > 0 && <span className="reactions">{m.reactions.map(emoji).join(' ')}</span>}
             </footer>

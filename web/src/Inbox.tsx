@@ -1,5 +1,6 @@
 import { type ChatMessage } from './api';
 import { CardView } from './Card';
+import { useFormatTime } from './time';
 
 interface Props {
   messages: ChatMessage[];
@@ -9,6 +10,7 @@ interface Props {
 
 /** The Owner's DM in the Console: Approval Requests and notices that belong to no Agent Group. */
 export function Inbox({ messages, onUpdated, onError }: Props) {
+  const formatTime = useFormatTime();
   return (
     <section className="chat">
       <header className="chat-header">Inbox</header>
@@ -21,7 +23,7 @@ export function Inbox({ messages, onUpdated, onError }: Props) {
             ) : (
               m.text && <div className="message-text">{m.text}</div>
             )}
-            <footer className="message-meta">{new Date(m.createdAt).toLocaleString()}</footer>
+            <footer className="message-meta">{formatTime(m.createdAt)}</footer>
           </article>
         ))}
       </div>
