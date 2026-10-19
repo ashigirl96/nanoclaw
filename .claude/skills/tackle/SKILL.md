@@ -8,13 +8,15 @@ spec または ticket でユーザーが記述した作業を、実装から mer
 
 ## 1. branch を切る
 
-作業は `issue-<番号>` の branch で行う。今の branch の名前が違えば、`git fetch origin main` してから `git switch --no-track -c issue-<番号> origin/main` で切る。worktree は前の ticket の branch のまま渡されることがあり、その branch は origin/main に無い commit を残しているため。切ったら `pnpm install --frozen-lockfile` と、`container/agent-runner` で `bun install --frozen-lockfile` を流す。worktree には依存が入っていないことがあるため。
+作業は `issue-<番号>` の branch で行う。今の branch の名前が違えば、`git fetch origin main` してから `git switch --no-track -c issue-<番号> origin/main` で切る。worktree は前の ticket の branch のまま渡されることがあり、その branch は origin/main に無い commit を残しているため。切ったら `pnpm install --frozen-lockfile` を root と `web` で、`bun install --frozen-lockfile` を `container/agent-runner` で流す。worktree には依存が入っていないことがあるため。
+
+続けて `git for-each-ref refs/salvage/issue-<番号>` を見る。ref があれば、それは前の worktree が commit せずに残した作業（ticket が参照する ADR や GLOSSARY の追記など）なので、`git show` で中身を読み、要るものを `git cherry-pick --no-commit` で取り込む。
 
 ## 2. 実装する
 
 Skill tool の `implement` を呼び、その手順に従う。手順の中の読み替えは次のとおり。
 
-- 最後に 1 回流すテストスイート全体は `sh scripts/check.sh`（CI の `test` job と同じ検査）。
+- 最後に 1 回流すテストスイート全体は `sh scripts/check.sh`（CI の `test` job と同じ検査）。`web/` を触ったときは、`web` で `pnpm run build`（型検査と vite の build）も流す。`check.sh` も CI も `web/` を見ないため。
 - code-review の fixed point は `git merge-base origin/main HEAD` で出した SHA にする。worktree のローカルの `main` は古いことがあり、他の PR の変更が diff に混ざるため。`$(...)` を含む git は worktree の session の guard が拒むので、SHA は先に出しておく。この時点の変更はまだコミットしていないので、新しいファイルを `git add -N` で載せてから `git diff <SHA>` で渡す。
 - コミットメッセージは scratchpad の file に書き、`git commit -F <file>` で渡す。worktree の session の guard は、heredoc やつないだコマンドで打つ git を拒むため。
 
