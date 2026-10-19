@@ -196,7 +196,14 @@ export function createConsoleAdapter(opts: ConsoleOptions): ConsoleAdapter {
 
     async deliver(platformId, _threadId, message): Promise<string | undefined> {
       const agentGroupId = agentGroupIdFrom(platformId);
-      if (!agentGroupId || !store) return undefined;
+      if (!store) return undefined;
+      if (!agentGroupId) {
+        log.warn('Console dropped an Outbound Message for a platform id it has no Chat for', {
+          platformId,
+          kind: message.kind,
+        });
+        return undefined;
+      }
       const content = (message.content ?? {}) as Record<string, unknown>;
 
       if (content.operation === 'edit' && typeof content.messageId === 'string') {
