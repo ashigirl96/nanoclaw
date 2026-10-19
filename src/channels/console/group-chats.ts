@@ -4,7 +4,7 @@ import { getAgentGroup } from '../../db/agent-groups.js';
 import type { Activity } from './activity.js';
 import { chatIdOfGroupChat } from './chat.js';
 import { dismantleGroupChat, unwireGroupChatMember, wireGroupChatMember } from './group-chat-wiring.js';
-import { HttpError, type Route, type RouteContext, ok, requireAgentGroup } from './http.js';
+import { HttpError, type Route, type RouteContext, ok } from './http.js';
 import type { Mentionable } from './mentions.js';
 import type { ChatMessage, ConsoleStore, GroupChat } from './store.js';
 import { markReadIn } from './unread.js';
@@ -22,12 +22,13 @@ export interface GroupChatSummary {
   activity: Record<string, Activity>;
 }
 
-/** Participants whose Agent Group still exists; `ncl groups delete` does not know about Group Chats. */
+/** Participants whose Agent Group still exists; `ncl groups delete` does not know about Group Chats, so this drops the rest. */
 export async function groupChatMembers(store: ConsoleStore, groupChatId: string): Promise<Mentionable[]> {
   const members: Mentionable[] = [];
   for (const id of store.groupChatMembers(groupChatId)) {
     const group = await getAgentGroup(id);
     if (group) members.push({ id: group.id, name: group.name });
+    else store.removeGroupChatMember(groupChatId, id);
   }
   return members;
 }
@@ -47,7 +48,7 @@ export const groupChatsRoute: Route = async (route, ctx) => {
     if (method === 'POST' && !rawAgentGroupId) {
       const { agentGroupId } = await ctx.readBody();
       if (typeof agentGroupId !== 'string') throw new HttpError(400, 'agentGroupId is required');
-      await addMember(ctx, chat, await requireAgentGroup(agentGroupId));
+      await addMember(ctx, chat, await requireMentionable(agentGroupId));
     } else if (method === 'DELETE' && rawAgentGroupId) {
       await removeMember(ctx, chat, decodeURIComponent(rawAgentGroupId));
     } else {
@@ -83,7 +84,9 @@ async function create(ctx: RouteContext): Promise<GroupChatSummary> {
   if (agentGroupIds.length < MIN_MEMBERS) {
     throw new HttpError(400, `a Group Chat needs at least ${MIN_MEMBERS} Agent Groups`);
   }
-  for (const id of agentGroupIds) await requireAgentGroup(id);
+  const members: Mentionable[] = [];
+  for (const id of agentGroupIds) members.push(await requireMentionable(id));
+  refuseSharedNames(members);
 
   const chat = ctx.store.createGroupChat(randomUUID(), name, agentGroupIds);
   for (const id of agentGroupIds) await wireGroupChatMember(chat, id);
@@ -91,19 +94,37 @@ async function create(ctx: RouteContext): Promise<GroupChatSummary> {
   return summaryOf(ctx, chat);
 }
 
-async function addMember(ctx: RouteContext, chat: GroupChat, agentGroupId: string): Promise<void> {
-  await wireGroupChatMember(chat, agentGroupId);
-  ctx.store.addGroupChatMember(chat.id, agentGroupId);
+async function addMember(ctx: RouteContext, chat: GroupChat, member: Mentionable): Promise<void> {
+  const members = await groupChatMembers(ctx.store, chat.id);
+  if (!members.some((m) => m.id === member.id)) refuseSharedNames([...members, member]);
+  await wireGroupChatMember(chat, member.id);
+  ctx.store.addGroupChatMember(chat.id, member.id);
 }
 
 async function removeMember(ctx: RouteContext, chat: GroupChat, agentGroupId: string): Promise<void> {
-  const members = ctx.store.groupChatMembers(chat.id);
+  const members = (await groupChatMembers(ctx.store, chat.id)).map((m) => m.id);
   if (!members.includes(agentGroupId)) throw new HttpError(404, `${agentGroupId} is not in this Group Chat`);
   if (members.length <= MIN_MEMBERS) {
     throw new HttpError(409, `a Group Chat keeps at least ${MIN_MEMBERS} Agent Groups; delete it instead`);
   }
   await unwireGroupChatMember(chat.id, agentGroupId);
   ctx.store.removeGroupChatMember(chat.id, agentGroupId);
+}
+
+async function requireMentionable(agentGroupId: string): Promise<Mentionable> {
+  const group = await getAgentGroup(agentGroupId);
+  if (!group) throw new HttpError(404, `unknown agent group ${agentGroupId}`);
+  return { id: group.id, name: group.name };
+}
+
+// Mentions match names without regard to case, so two such participants could never be told apart.
+function refuseSharedNames(members: Mentionable[]): void {
+  const seen = new Set<string>();
+  for (const m of members) {
+    const key = m.name.toLowerCase();
+    if (seen.has(key)) throw new HttpError(409, `two participants would share the name ${m.name}`);
+    seen.add(key);
+  }
 }
 
 function requireGroupChat(ctx: RouteContext, id: string): GroupChat {

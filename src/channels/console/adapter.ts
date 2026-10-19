@@ -122,13 +122,15 @@ export function createConsoleAdapter(opts: ConsoleOptions): ConsoleAdapter {
     const members = await groupChatMembers(store!, groupChatId!);
     const mentioned = mentionedIn(text, members);
     for (const id of options.addressedTo ?? []) mentioned.add(id);
-    for (const member of members) {
+    const deliverTo = async (member: { id: string }) =>
       await setupConfig!.onInbound(groupChatPlatformId(groupChatId!, member.id), null, {
         ...inbound,
         isMention: mentioned.has(member.id),
         isGroup: true,
       });
-    }
+    // Context goes in first: a woken Agent's reply must not reach a Session ahead of the message it answers.
+    for (const member of members.filter((m) => !mentioned.has(m.id))) await deliverTo(member);
+    await Promise.all(members.filter((m) => mentioned.has(m.id)).map(deliverTo));
     return message;
   }
 

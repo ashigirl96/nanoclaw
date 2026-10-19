@@ -5,6 +5,7 @@ import path from 'path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { getDb } from '../../db/connection.js';
 import { closeDb, initTestDb, runMigrations } from '../../db/index.js';
 import { createAgentGroup } from '../../db/agent-groups.js';
 import { getMessagingGroupAgents, getMessagingGroupByPlatform } from '../../db/messaging-groups.js';
@@ -112,6 +113,15 @@ async function sessionMessages(agentGroupId: string, platformId: string) {
   }
 }
 
+// What `ncl groups delete` leaves behind for the Console: the Agent Group is gone, its Group Chat membership is not.
+async function deleteAgentGroupRow(id: string): Promise<void> {
+  const db = getDb();
+  await db.run('DELETE FROM sessions WHERE agent_group_id = ?', id);
+  await db.run('DELETE FROM agent_destinations WHERE agent_group_id = ? OR target_id = ?', id, id);
+  await db.run('DELETE FROM messaging_group_agents WHERE agent_group_id = ?', id);
+  await db.run('DELETE FROM agent_groups WHERE id = ?', id);
+}
+
 function platformIdOf(chat: GroupChat, agentGroupId: string): string {
   return `web:gc:${chat.id}:${agentGroupId}`;
 }
@@ -148,6 +158,20 @@ describe('Mention in a Group Chat', () => {
     await say(chat, '@Alice 調べてください');
 
     expect(woken()).toEqual(['ag-a']);
+  });
+
+  it('gives every participant the message before it wakes the named one', async () => {
+    const chat = await createGroupChat('相談', ['ag-a', 'ag-b']);
+    let othersAtWake: string[] = [];
+    vi.mocked(wakeContainer).mockImplementationOnce(async () => {
+      othersAtWake = (await sessionMessages('ag-b', platformIdOf(chat, 'ag-b'))).map((m) => m.text);
+      return true;
+    });
+
+    await say(chat, '@Alice 調べて');
+
+    expect(woken()).toEqual(['ag-a']);
+    expect(othersAtWake).toEqual(['@Alice 調べて']);
   });
 
   it('wakes no one without a Mention, and the next Mention finds that message as context', async () => {
@@ -228,6 +252,45 @@ describe('replies in a Group Chat', () => {
 });
 
 describe('participants', () => {
+  it('refuses two participants that share a name, since a Mention could not tell them apart', async () => {
+    await createAgentGroup({
+      id: 'ag-a2',
+      name: 'alice',
+      folder: 'alice2',
+      agent_provider: null,
+      created_at: '2026-10-01T00:00:00.000Z',
+    });
+    const chat = await createGroupChat('相談', ['ag-a', 'ag-b']);
+
+    const created = await fetch(`${adapter!.url()}/api/group-chats`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: '同名', agentGroupIds: ['ag-a', 'ag-a2'] }),
+    });
+    const added = await fetch(`${adapter!.url()}/api/group-chats/${chat.id}/members`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ agentGroupId: 'ag-a2' }),
+    });
+
+    expect([created.status, added.status]).toEqual([409, 409]);
+    expect((await api<GroupChat[]>('/api/group-chats')).map((c) => c.members.map((m) => m.id))).toEqual([
+      ['ag-a', 'ag-b'],
+    ]);
+  });
+
+  it('does not count a participant whose Agent Group was deleted', async () => {
+    const chat = await createGroupChat('相談', ['ag-a', 'ag-b', 'ag-c']);
+    await deleteAgentGroupRow('ag-c');
+
+    const res = await fetch(`${adapter!.url()}/api/group-chats/${chat.id}/members/ag-b`, {
+      method: 'DELETE',
+      headers: { 'content-type': 'application/json' },
+    });
+
+    expect(res.status).toBe(409);
+  });
+
   it('lets an added Agent answer later Mentions without the earlier history', async () => {
     const chat = await createGroupChat('相談', ['ag-a', 'ag-b']);
     await say(chat, '前置き');
