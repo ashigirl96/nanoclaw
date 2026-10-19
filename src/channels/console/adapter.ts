@@ -18,7 +18,9 @@ import {
   platformIdOfChat,
 } from './chat.js';
 import { mimeTypeFor } from './mime.js';
+import type { FormCard } from './cards.js';
 import { type Notice, noticeFor } from './notify.js';
+import { formAnswerOf } from './posted-questions.js';
 import { answerRoute, cardOf, lateAnswerText } from './questions.js';
 import { serveStatic } from './static.js';
 import { type ChatMessage, ConsoleStore, type NewFile } from './store.js';
@@ -125,6 +127,7 @@ export function createConsoleAdapter(opts: ConsoleOptions): ConsoleAdapter {
     const message = store!.getMessage(messageId);
     const card = message?.card;
     if (!message || !card || card.type === 'links') throw new HttpError(404, 'no card takes answers here');
+    if (card.type === 'form') return answerForm(message, card, body.values);
     const option = card.options.find((o) => o.value === body.value);
     if (!option) throw new HttpError(400, 'value must be one of the card options');
     if (card.resolution !== null) throw new HttpError(409, 'the card is already answered');
@@ -148,6 +151,19 @@ export function createConsoleAdapter(opts: ConsoleOptions): ConsoleAdapter {
       });
     }
     return store!.getMessage(message.id)!;
+  }
+
+  async function answerForm(message: ChatMessage, card: FormCard, values: unknown): Promise<ChatMessage> {
+    if (card.resolution !== null) throw new HttpError(409, 'the card is already answered');
+    const answer = formAnswerOf(card, values);
+    if ('error' in answer) throw new HttpError(400, answer.error);
+    const resolved = store!.updateCard(message.agentGroupId, message.id, (c) =>
+      c.type === 'form' && c.resolution === null ? { ...c, resolution: answer.resolution } : null,
+    );
+    if (!resolved) throw new HttpError(409, 'the card is already answered');
+    broadcast({ type: 'message', message: resolved });
+    if (message.agentGroupId !== null) await sendFromOwner(message.agentGroupId, { text: answer.text });
+    return resolved;
   }
 
   async function handle(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {

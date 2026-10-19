@@ -16,7 +16,7 @@ export function noticeFor(platformId: string, message: OutboundMessage): Notice 
   if (typeof content.operation === 'string') return null;
   const agentGroupId = agentGroupIdFrom(platformId);
 
-  if (content.type === 'ask_question') {
+  if (content.type === 'ask_question' || content.type === 'post_question') {
     const body = stringOr(content.question, stringOr(content.title, ''));
     return { kind: agentGroupId ? 'question' : 'approval', agentGroupId, body };
   }

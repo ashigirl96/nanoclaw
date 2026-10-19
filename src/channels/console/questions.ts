@@ -1,6 +1,7 @@
 import { getPendingQuestion } from '../../db/sessions.js';
 import { resolveQuestionRender } from '../question-render-registry.js';
 import { type Card, type ChoiceCard, choiceCardFrom, linkCardFrom } from './cards.js';
+import { postedCardOf } from './posted-questions.js';
 
 /** The card an Outbound Message carries, if any, plus the text the Chat list shows for it. */
 export async function cardOf(content: Record<string, unknown>): Promise<{ card: Card; text: string } | null> {
@@ -10,6 +11,8 @@ export async function cardOf(content: Record<string, unknown>): Promise<{ card: 
     const card = choiceCardFrom(content, isQuestion);
     return card && { card, text: card.question || card.title };
   }
+  const posted = postedCardOf(content);
+  if (posted) return { card: posted, text: posted.question || posted.title };
   const card = linkCardFrom(content);
   if (!card) return null;
   const fallback = typeof content.fallbackText === 'string' ? content.fallbackText : '';
