@@ -372,6 +372,10 @@ _Avoid_: secret, token
 Agent Group が外部サービスを続けて使えるよう、Gateway の側で Credential を用意する手続き。1 回の request を許すだけの Credential Approval とは別物。
 _Avoid_: connect, OAuth approval
 
+**Connected Account**:
+Gateway が Credential を持っている、外部サービスのアカウント 1 つ。Account Connection の結果できる。
+_Avoid_: connection, app, integration
+
 **Gateway Outage**:
 Gateway が使えない状態。その間 Host は Container を動かさず、届いた Inbound Message は Pending のまま待つ。
 _Avoid_: session admission, gateway unavailable
