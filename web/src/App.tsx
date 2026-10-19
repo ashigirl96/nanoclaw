@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import { type AgentGroupSummary, type ChatMessage, type ConsoleEvent, api, subscribe } from './api';
+import { type AgentGroupSummary, type ChatMessage, type ConsoleEvent, api, awaitsAnswer, subscribe } from './api';
 import { Chat } from './Chat';
 import { Inbox } from './Inbox';
 import { NewAgentDialog } from './NewAgentDialog';
@@ -80,7 +80,7 @@ export function App() {
   useNotificationPermission();
 
   const current = groups.find((g) => g.id === selected) ?? null;
-  const waiting = inbox.filter((m) => m.card && m.card.type !== 'links' && m.card.resolution === null).length;
+  const waiting = inbox.filter((m) => m.card && awaitsAnswer(m.card)).length;
   const lastMessageId = messages.at(-1)?.id;
   const unreadHere = current?.unread ?? 0;
   const markSeen = useCallback(() => {

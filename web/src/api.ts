@@ -50,6 +50,10 @@ export type FormValues = Record<string, string | string[]>;
 
 export type Card = ChoiceCard | LinkCard | FormCard;
 
+export function awaitsAnswer(card: Card): card is ChoiceCard | FormCard {
+  return card.type !== 'links' && card.resolution === null;
+}
+
 export interface ChatMessage {
   id: string;
   /** null for the Inbox. */
