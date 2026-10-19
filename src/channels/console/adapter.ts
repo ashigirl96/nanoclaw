@@ -6,9 +6,17 @@ import { DATA_DIR } from '../../config.js';
 import { getAgentGroup, getAllAgentGroups } from '../../db/agent-groups.js';
 import { log } from '../../log.js';
 import type { ChannelAdapter, ChannelSetup } from '../adapter.js';
-import { CHANNEL_TYPE, CONSOLE_DEFAULTS, OWNER_USER_ID, chatOf, ensureConsoleChat, platformIdFor } from './chat.js';
+import {
+  CHANNEL_TYPE,
+  CONSOLE_DEFAULTS,
+  OWNER_USER_ID,
+  chatOf,
+  ensureConsoleChat,
+  platformIdFor,
+  platformIdOfChat,
+} from './chat.js';
 import { mimeTypeFor } from './mime.js';
-import { cardOf } from './questions.js';
+import { answerRoute, cardOf, lateAnswerText } from './questions.js';
 import { serveStatic } from './static.js';
 import { type ChatMessage, ConsoleStore, type NewFile } from './store.js';
 
@@ -34,6 +42,7 @@ class HttpError extends Error {
 }
 
 const MAX_BODY_BYTES = 50 * 1024 * 1024;
+const EXPIRED_RESOLUTION = '⏱️ もう受け付けていません';
 
 export function consoleAdapterFromEnv(env: Record<string, string | undefined>): ConsoleAdapter | null {
   if (!env.CONSOLE_PORT) return null;
@@ -96,6 +105,35 @@ export function createConsoleAdapter(opts: ConsoleOptions): ConsoleAdapter {
     return message;
   }
 
+  async function answerCard(messageId: string, body: Record<string, unknown>): Promise<ChatMessage> {
+    const message = store!.getMessage(messageId);
+    const card = message?.card;
+    if (!message || !card || card.type === 'links') throw new HttpError(404, 'no card takes answers here');
+    const option = card.options.find((o) => o.value === body.value);
+    if (!option) throw new HttpError(400, 'value must be one of the card options');
+    if (card.resolution !== null) throw new HttpError(409, 'the card is already answered');
+
+    const route = await answerRoute(card);
+    if (route !== 'deferred') {
+      const resolution = route === 'expired' ? EXPIRED_RESOLUTION : option.selectedLabel;
+      const resolved = store!.updateCard(message.agentGroupId, message.id, (c) =>
+        c.type !== 'links' && c.resolution === null ? { ...c, resolution } : null,
+      );
+      if (!resolved) throw new HttpError(409, 'the card is already answered');
+      broadcast({ type: 'message', message: resolved });
+    }
+
+    if (route === 'chat' && message.agentGroupId !== null) {
+      await sendFromOwner(message.agentGroupId, { text: lateAnswerText(card, option) });
+    } else if (route !== 'expired') {
+      setupConfig!.onAction(card.questionId, option.value, OWNER_USER_ID, {
+        messageId: message.id,
+        platformId: platformIdOfChat(message.agentGroupId),
+      });
+    }
+    return store!.getMessage(message.id)!;
+  }
+
   async function handle(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
     const url = new URL(req.url ?? '/', 'http://console');
     const route = `${req.method} ${url.pathname}`;
@@ -118,6 +156,9 @@ export function createConsoleAdapter(opts: ConsoleOptions): ConsoleAdapter {
     }
 
     if (route === 'GET /api/inbox') return sendJson(res, 200, store!.listMessages(null));
+
+    const answer = /^POST \/api\/messages\/([^/]+)\/answer$/.exec(route);
+    if (answer) return sendJson(res, 200, await answerCard(decodeURIComponent(answer[1]), await readJson(req)));
 
     const file = /^GET \/api\/files\/([^/]+)$/.exec(route);
     if (file) {
@@ -203,7 +244,12 @@ export function createConsoleAdapter(opts: ConsoleOptions): ConsoleAdapter {
       const content = (message.content ?? {}) as Record<string, unknown>;
 
       if (content.operation === 'edit' && typeof content.messageId === 'string') {
-        const edited = store.editMessage(agentGroupId, storeIdOf(content.messageId, agentGroupId), textOf(content));
+        const id = storeIdOf(content.messageId, agentGroupId);
+        const resolution = terminalResolutionOf(content);
+        const edited =
+          resolution === null
+            ? store.editMessage(agentGroupId, id, textOf(content))
+            : store.updateCard(agentGroupId, id, (c) => (c.type === 'links' ? null : { ...c, resolution }));
         if (edited) broadcast({ type: 'message', message: edited });
         return undefined;
       }
@@ -267,6 +313,11 @@ function storeIdOf(messageId: string, agentGroupId: string | null): string {
   if (agentGroupId === null) return messageId;
   const suffix = `:${agentGroupId}`;
   return messageId.endsWith(suffix) ? messageId.slice(0, -suffix.length) : messageId;
+}
+
+function terminalResolutionOf(content: Record<string, unknown>): string | null {
+  const terminal = content.terminalCard as { resolution?: unknown } | undefined;
+  return typeof terminal?.resolution === 'string' ? terminal.resolution : null;
 }
 
 function textOf(content: Record<string, unknown>): string {

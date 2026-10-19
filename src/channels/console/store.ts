@@ -153,11 +153,14 @@ export class ConsoleStore {
     return result.changes > 0 ? this.getMessage(id) : null;
   }
 
-  setCard(agentGroupId: string | null, id: string, card: Card): ChatMessage | null {
-    const result = this.db
-      .prepare('UPDATE messages SET card = ? WHERE id = ? AND agent_group_id = ?')
-      .run(JSON.stringify(card), id, chatKey(agentGroupId));
-    return result.changes > 0 ? this.getMessage(id) : null;
+  /** Replaces the card with what `update` returns; null from `update` leaves the message as it is. */
+  updateCard(agentGroupId: string | null, id: string, update: (card: Card) => Card | null): ChatMessage | null {
+    const message = this.getMessage(id);
+    if (!message?.card || message.agentGroupId !== agentGroupId) return null;
+    const next = update(message.card);
+    if (!next) return null;
+    this.db.prepare('UPDATE messages SET card = ? WHERE id = ?').run(JSON.stringify(next), id);
+    return this.getMessage(id);
   }
 
   addReaction(agentGroupId: string | null, id: string, emoji: string): ChatMessage | null {

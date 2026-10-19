@@ -83,6 +83,7 @@ interface InboxMessage {
   agentGroupId: string | null;
   card: {
     type: string;
+    questionId: string;
     title: string;
     question: string;
     options: Array<{ label: string; value: string }>;
@@ -203,5 +204,81 @@ describe('Approval Requests', () => {
     expect(slackDeliveries).toHaveLength(1);
     expect(slackDeliveries[0].content).toMatchObject({ type: 'ask_question', title: 'Install packages' });
     expect(await inbox()).toEqual([]);
+  });
+});
+
+async function answer(messageId: string, value: string): Promise<InboxMessage> {
+  return api<InboxMessage>(`/api/messages/${messageId}/answer`, { method: 'POST', body: JSON.stringify({ value }) });
+}
+
+describe('answering an Approval Request', () => {
+  it('returns Approve to the Host and shows the result on the card', async () => {
+    await askApproval(sessionIn('sess-web', await consoleMessagingGroupId()));
+    const [card] = await inbox();
+
+    await answer(card.id, 'approve');
+
+    expect(actions).toEqual([
+      {
+        questionId: card.card!.questionId,
+        value: 'approve',
+        userId: 'web:owner',
+        messageId: card.id,
+        platformId: 'owner',
+      },
+    ]);
+    expect((await inbox())[0].card).toMatchObject({ resolution: '✅ Approved' });
+  });
+
+  it('returns Reject the same way', async () => {
+    await askApproval(sessionIn('sess-web', await consoleMessagingGroupId()));
+    const [card] = await inbox();
+
+    await answer(card.id, 'reject');
+
+    expect(actions.map((a) => a.value)).toEqual(['reject']);
+    expect((await inbox())[0].card).toMatchObject({ resolution: '❌ Rejected' });
+  });
+
+  it('takes one answer per card', async () => {
+    await askApproval(sessionIn('sess-web', await consoleMessagingGroupId()));
+    const [card] = await inbox();
+    await answer(card.id, 'approve');
+
+    await expect(answer(card.id, 'reject')).rejects.toThrow(/409/);
+    expect(actions).toHaveLength(1);
+  });
+
+  it('shows the result the Host writes back on the card', async () => {
+    const id = await consoleAdapter().deliver('owner', null, {
+      kind: 'chat-sdk',
+      content: {
+        type: 'ask_question',
+        questionId: 'ga-1',
+        title: 'Credential request',
+        question: 'Alice wants to call api.github.com',
+        options: [
+          { label: 'Approve', value: 'approve' },
+          { label: 'Reject', value: 'reject' },
+        ],
+      },
+    });
+
+    await consoleAdapter().deliver('owner', null, {
+      kind: 'chat-sdk',
+      content: {
+        questionId: 'ga-1',
+        operation: 'edit',
+        messageId: id,
+        text: 'Credential request\n\nAlice wants to call api.github.com\n\n✅ Approved',
+        terminalCard: {
+          title: 'Credential request',
+          question: 'Alice wants to call api.github.com',
+          resolution: '✅ Approved',
+        },
+      },
+    });
+
+    expect((await inbox())[0].card).toMatchObject({ resolution: '✅ Approved' });
   });
 });
