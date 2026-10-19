@@ -43,11 +43,15 @@ export function App() {
 
   useEffect(() => {
     if (!selected) return;
+    let stale = false;
     setMessages([]);
     api.open(selected).then(
-      (chat) => setMessages(chat.messages),
-      (err: Error) => setError(err.message),
+      (chat) => !stale && setMessages(chat.messages),
+      (err: Error) => !stale && setError(err.message),
     );
+    return () => {
+      stale = true;
+    };
   }, [selected]);
 
   const navigate = useCallback((next: Exclude<View, null>) => {
@@ -89,7 +93,9 @@ export function App() {
 
   const current = groups.find((g) => g.id === selected) ?? null;
   const waiting = inbox.filter((m) => m.card && awaitsAnswer(m.card)).length;
-  const lastMessageId = messages.at(-1)?.id;
+  // Right after a switch, messages still hold the previous Chat until the new one loads.
+  const last = messages.at(-1);
+  const lastMessageId = last?.agentGroupId === selected ? last.id : undefined;
   const unreadHere = current?.unread ?? 0;
   const markSeen = useCallback(() => {
     if (!selected || !lastMessageId || unreadHere === 0 || !isForeground()) return;
