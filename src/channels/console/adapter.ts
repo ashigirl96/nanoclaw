@@ -6,6 +6,7 @@ import { DATA_DIR } from '../../config.js';
 import { getAgentGroup, getAllAgentGroups } from '../../db/agent-groups.js';
 import { log } from '../../log.js';
 import type { ChannelAdapter, ChannelSetup } from '../adapter.js';
+import { type Activity, ActivityBoard, currentToolOf } from './activity.js';
 import {
   CHANNEL_TYPE,
   CONSOLE_DEFAULTS,
@@ -18,7 +19,9 @@ import { mimeTypeFor } from './mime.js';
 import { serveStatic } from './static.js';
 import { type ChatMessage, ConsoleStore, type NewFile } from './store.js';
 
-type ConsoleEvent = { type: 'message'; message: ChatMessage };
+type ConsoleEvent =
+  | { type: 'message'; message: ChatMessage }
+  | { type: 'activity'; agentGroupId: string; activity: Activity };
 
 export interface ConsoleOptions {
   port: number;
@@ -56,6 +59,9 @@ export function createConsoleAdapter(opts: ConsoleOptions): ConsoleAdapter {
   let store: ConsoleStore | null = null;
   let setupConfig: ChannelSetup | null = null;
   const subscribers = new Set<http.ServerResponse>();
+  const activity = new ActivityBoard((agentGroupId, next) =>
+    broadcast({ type: 'activity', agentGroupId, activity: next }),
+  );
 
   function broadcast(event: ConsoleEvent): void {
     const frame = `data: ${JSON.stringify(event)}\n\n`;
@@ -119,7 +125,12 @@ export function createConsoleAdapter(opts: ConsoleOptions): ConsoleAdapter {
       return sendJson(
         res,
         200,
-        groups.map((g) => ({ id: g.id, name: g.name, lastMessage: store!.lastMessage(g.id) })),
+        groups.map((g) => ({
+          id: g.id,
+          name: g.name,
+          lastMessage: store!.lastMessage(g.id),
+          activity: activity.get(g.id),
+        })),
       );
     }
 
@@ -188,11 +199,18 @@ export function createConsoleAdapter(opts: ConsoleOptions): ConsoleAdapter {
         await new Promise<void>((resolve) => server!.close(() => resolve()));
         server = null;
       }
+      activity.dispose();
       store?.close();
       store = null;
     },
 
     isConnected: () => server !== null,
+
+    async setTyping(platformId): Promise<void> {
+      const agentGroupId = agentGroupIdFrom(platformId);
+      if (!agentGroupId || !store) return;
+      activity.touch(agentGroupId, await currentToolOf(agentGroupId, platformId));
+    },
 
     async deliver(platformId, _threadId, message): Promise<string | undefined> {
       const agentGroupId = agentGroupIdFrom(platformId);
@@ -228,6 +246,7 @@ export function createConsoleAdapter(opts: ConsoleOptions): ConsoleAdapter {
       }));
       const stored = store.addMessage({ agentGroupId, role: 'agent', text: textOf(content), files });
       broadcast({ type: 'message', message: stored });
+      activity.clear(agentGroupId);
       return stored.id;
     },
 
