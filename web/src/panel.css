@@ -1,5 +1,5 @@
 .layout.with-panel {
-  grid-template-columns: 264px 1fr 320px;
+  grid-template-columns: var(--sidebar-width) minmax(0, 1fr) var(--panel-width);
 }
 
 .panel {
@@ -221,10 +221,11 @@
 
 @media (max-width: 1024px) {
   .layout.with-panel {
-    grid-template-columns: 240px 1fr;
+    grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
   }
 
-  .panel {
+  .panel,
+  .resize-handle.left {
     display: none;
   }
 }

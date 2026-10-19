@@ -53,9 +53,54 @@ button {
 }
 
 .layout {
+  position: relative;
   display: grid;
-  grid-template-columns: 264px 1fr;
+  grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
   height: 100vh;
+}
+
+.resize-handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  z-index: 5;
+  width: 9px;
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.resize-handle.right {
+  left: calc(var(--sidebar-width) - 5px);
+}
+
+.resize-handle.left {
+  right: calc(var(--panel-width) - 4px);
+}
+
+.resize-handle::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 3px;
+  width: 3px;
+  border-radius: 2px;
+  transition: background 0.15s;
+}
+
+.resize-handle:hover::after,
+.resize-handle:focus-visible::after,
+body.resizing .resize-handle:active::after {
+  background: var(--accent);
+}
+
+.resize-handle:focus-visible {
+  outline: none;
+}
+
+body.resizing {
+  cursor: col-resize;
+  user-select: none;
 }
 
 .icon-button {
@@ -288,9 +333,15 @@ button {
   align-items: center;
   gap: 8px;
   padding: 5px 14px 5px 6px;
+  border: 0;
   border-radius: 999px;
   background: var(--bg-raised);
   font-weight: 500;
+  cursor: pointer;
+}
+
+.chat-pill:hover {
+  background: var(--bg-hover);
 }
 
 .chat-panel-toggle {
@@ -726,6 +777,10 @@ button {
   .layout {
     grid-template-columns: 1fr;
     grid-template-rows: auto 1fr;
+  }
+
+  .resize-handle {
+    display: none;
   }
 
   .sidebar {
