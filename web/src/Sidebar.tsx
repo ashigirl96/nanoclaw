@@ -15,10 +15,18 @@ export function Sidebar({ groups, selected, onSelect }: Props) {
           <li key={g.id}>
             <button
               type="button"
-              className={g.id === selected ? 'group selected' : 'group'}
+              className={['group', g.id === selected && 'selected', g.unread > 0 && 'unread'].filter(Boolean).join(' ')}
               onClick={() => onSelect(g.id)}
             >
-              <span className="group-name">{g.name}</span>
+              <span className="group-head">
+                <span className="group-name">{g.name}</span>
+                {g.activity.working && <span className="working-dot" title="作業中" aria-label="作業中" />}
+                {g.unread > 0 && (
+                  <span className="unread-badge" aria-label={`未読 ${g.unread} 件`}>
+                    {g.unread}
+                  </span>
+                )}
+              </span>
               <span className="group-excerpt">{excerpt(g.lastMessage)}</span>
             </button>
           </li>

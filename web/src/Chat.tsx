@@ -18,7 +18,7 @@ export function Chat({ group, messages, onSent, onError }: Props) {
 
   useEffect(() => {
     bottom.current?.scrollIntoView({ block: 'end' });
-  }, [messages.length]);
+  }, [messages.length, group.activity.working]);
 
   async function submit(e?: FormEvent) {
     e?.preventDefault();
@@ -66,6 +66,12 @@ export function Chat({ group, messages, onSent, onError }: Props) {
             </footer>
           </article>
         ))}
+        {group.activity.working && (
+          <div className="working" role="status">
+            <span className="working-dot" />
+            {group.activity.tool ? `${group.activity.tool} を実行中…` : '作業中…'}
+          </div>
+        )}
         <div ref={bottom} />
       </div>
       <form className="composer" onSubmit={submit}>
