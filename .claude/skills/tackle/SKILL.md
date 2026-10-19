@@ -10,6 +10,8 @@ spec または ticket でユーザーが記述した作業を、実装から mer
 
 作業は `issue-<番号>` の branch で行う。今の branch の名前が違えば、`git fetch origin main` してから `git switch --no-track -c issue-<番号> origin/main` で切る。worktree は前の ticket の branch のまま渡されることがあり、その branch は origin/main に無い commit を残しているため。切ったら `pnpm install --frozen-lockfile` と、`container/agent-runner` で `bun install --frozen-lockfile` を流す。worktree には依存が入っていないことがあるため。
 
+`git log --oneline -1 refs/salvage/issue-<番号>` が commit を返したら、`git show` で中身を読み、ticket が参照する ADR や GLOSSARY の項目があれば `git checkout <SHA> -- <path>` で取り込む。「2 番目の版」の ticket では、前の版の worktree に残った未コミットの作業がこの ref に退避されていて、ticket はそこで書いた文書を前提にしているため。
+
 ## 2. 実装する
 
 Skill tool の `implement` を呼び、その手順に従う。手順の中の読み替えは次のとおり。
