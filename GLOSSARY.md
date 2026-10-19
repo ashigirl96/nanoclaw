@@ -62,8 +62,20 @@ _Avoid_: channel registration
 ## Platform
 
 **Platform**:
-人がやり取りに使う外部のメッセージングサービス。Slack、Discord、WhatsApp、email、GitHub など。
+人がやり取りに使うメッセージングサービス。Slack、Discord、WhatsApp、email、GitHub などの外部のものと、Host が自ら配信する Console がある。
 _Avoid_: channel, channel type, service
+
+**Console**:
+Host が自ら配信する、Owner だけが使う Platform。Agent Group を一覧に並べ、Agent Group ごとに 1 つの Chat を持つ。
+_Avoid_: web UI, local-web, dashboard
+
+**Inbox**:
+Console の中で Owner の DM にあたる Chat。どの Agent Group の Chat にも属さない Approval Request や知らせが届く。
+_Avoid_: notifications, DM
+
+**Library**:
+Console で Agent Group ごとに見られる、その Agent が Console に届けたファイルの一覧。
+_Avoid_: artifacts, files, workspace
 
 **Channel**:
 NanoClaw が 1 つの identity で Platform につなぐ連携。1 つの Platform に複数の Channel を持てる。
@@ -215,6 +227,10 @@ _Avoid_: messages_out row, message_out
 **System Action**:
 Agent ができない操作を、代わりに Host に頼む Outbound Message。Agent Group の設定変更、Agent の作成、`ncl` コマンドの実行など。中には Privileged Action のものもある。
 _Avoid_: outbound system message
+
+**Question**:
+Agent が Chat に出す、選択肢か入力欄を持つ問いかけ。人はいつ答えてもよく、答えは Agent に届く。Approver に向けた Approval Request とは別物。
+_Avoid_: card, prompt, ask, form
 
 **Run Log**:
 Agent が Task を実行したときの経過を記録する Outbound Message。
