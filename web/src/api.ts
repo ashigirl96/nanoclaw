@@ -15,10 +15,23 @@ export interface ChatMessage {
   editedAt: string | null;
 }
 
+export interface Activity {
+  working: boolean;
+  tool: string | null;
+}
+
 export interface AgentGroupSummary {
   id: string;
   name: string;
   lastMessage: ChatMessage | null;
+  activity: Activity;
+  unread: number;
+}
+
+export interface Notice {
+  kind: 'reply' | 'question' | 'approval';
+  agentGroupId: string | null;
+  body: string;
 }
 
 export interface Upload {
@@ -57,11 +70,14 @@ export interface Template {
   description: string;
 }
 
-export type CreateAgentOutcome =
-  | { status: 'created'; agentGroup: { id: string; name: string } }
-  | { status: 'held' };
+export type CreateAgentOutcome = { status: 'created'; agentGroup: { id: string; name: string } } | { status: 'held' };
 
-export type ConsoleEvent = { type: 'message'; message: ChatMessage } | { type: 'agent-groups' };
+export type ConsoleEvent =
+  | { type: 'message'; message: ChatMessage }
+  | { type: 'activity'; agentGroupId: string; activity: Activity }
+  | { type: 'unread'; agentGroupId: string; unread: number }
+  | ({ type: 'notify' } & Notice)
+  | { type: 'agent-groups' };
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, { ...init, headers: { 'content-type': 'application/json', ...init?.headers } });
@@ -92,6 +108,11 @@ export const api = {
     request<CreateAgentOutcome>('/api/agent-groups', {
       method: 'POST',
       body: JSON.stringify({ template, name }),
+    }),
+  markRead: (agentGroupId: string, messageId: string) =>
+    request<{ unread: number }>(`/api/agent-groups/${encodeURIComponent(agentGroupId)}/read`, {
+      method: 'POST',
+      body: JSON.stringify({ messageId }),
     }),
 };
 
