@@ -1,6 +1,7 @@
 import { type FormEvent, type KeyboardEvent, useEffect, useRef, useState } from 'react';
 
 import { type AgentGroupSummary, type ChatMessage, type Upload, api, readUpload } from './api';
+import { CardView } from './Card';
 import { FilePreview } from './FilePreview';
 
 interface Props {
@@ -55,7 +56,11 @@ export function Chat({ group, messages, onSent, onError }: Props) {
       <div className="messages">
         {messages.map((m) => (
           <article key={m.id} className={`message ${m.role}`}>
-            {m.text && <div className="message-text">{m.text}</div>}
+            {m.card ? (
+              <CardView message={{ ...m, card: m.card }} onAnswered={onSent} onError={onError} />
+            ) : (
+              m.text && <div className="message-text">{m.text}</div>
+            )}
             {m.files.map((f) => (
               <FilePreview key={f.id} file={f} />
             ))}

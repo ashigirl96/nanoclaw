@@ -2,23 +2,30 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { type AgentGroupSummary, type ChatMessage, type ConsoleEvent, api, subscribe } from './api';
 import { Chat } from './Chat';
+import { Inbox } from './Inbox';
 import { announce, isForeground, useForeground, useNotificationPermission } from './notifications';
 import { Sidebar } from './Sidebar';
 
-function agentGroupIdFromPath(): string | null {
+type View = { kind: 'inbox' } | { kind: 'chat'; agentGroupId: string } | null;
+
+function viewFromPath(): View {
+  if (window.location.pathname === '/inbox') return { kind: 'inbox' };
   const match = /^\/chat\/([^/]+)$/.exec(window.location.pathname);
-  return match ? decodeURIComponent(match[1]) : null;
+  return match ? { kind: 'chat', agentGroupId: decodeURIComponent(match[1]) } : null;
 }
 
 export function App() {
   const [groups, setGroups] = useState<AgentGroupSummary[]>([]);
-  const [selected, setSelected] = useState<string | null>(agentGroupIdFromPath);
+  const [view, setView] = useState<View>(viewFromPath);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [inbox, setInbox] = useState<ChatMessage[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const selected = view?.kind === 'chat' ? view.agentGroupId : null;
 
   useEffect(() => {
     api.agentGroups().then(setGroups, (err: Error) => setError(err.message));
-    const onPop = () => setSelected(agentGroupIdFromPath());
+    api.inbox().then(setInbox, (err: Error) => setError(err.message));
+    const onPop = () => setView(viewFromPath());
     window.addEventListener('popstate', onPop);
     return () => window.removeEventListener('popstate', onPop);
   }, []);
@@ -32,9 +39,10 @@ export function App() {
     );
   }, [selected]);
 
-  const select = useCallback((id: string) => {
-    window.history.pushState(null, '', `/chat/${encodeURIComponent(id)}`);
-    setSelected(id);
+  const navigate = useCallback((next: Exclude<View, null>) => {
+    const path = next.kind === 'inbox' ? '/inbox' : `/chat/${encodeURIComponent(next.agentGroupId)}`;
+    window.history.pushState(null, '', path);
+    setView(next);
   }, []);
 
   const groupsRef = useRef(groups);
@@ -45,6 +53,10 @@ export function App() {
       subscribe((event: ConsoleEvent) => {
         if (event.type === 'message') {
           const { message } = event;
+          if (message.agentGroupId === null) {
+            setInbox((prev) => upsert(prev, message));
+            return;
+          }
           setGroups((prev) => prev.map((g) => (g.id === message.agentGroupId ? withLastMessage(g, message) : g)));
           if (message.agentGroupId === selected) setMessages((prev) => upsert(prev, message));
         } else if (event.type === 'activity') {
@@ -54,15 +66,16 @@ export function App() {
         } else if (event.type === 'notify') {
           const target = event.agentGroupId;
           const name = target ? (groupsRef.current.find((g) => g.id === target)?.name ?? target) : 'Inbox';
-          announce(event, name, () => target && select(target));
+          announce(event, name, () => navigate(target ? { kind: 'chat', agentGroupId: target } : { kind: 'inbox' }));
         }
       }),
-    [selected, select],
+    [selected, navigate],
   );
 
   useNotificationPermission();
 
   const current = groups.find((g) => g.id === selected) ?? null;
+  const waiting = inbox.filter((m) => m.card && m.card.type !== 'links' && m.card.resolution === null).length;
   const lastMessageId = messages.at(-1)?.id;
   const unreadHere = current?.unread ?? 0;
   const markSeen = useCallback(() => {
@@ -74,14 +87,23 @@ export function App() {
 
   return (
     <div className="layout">
-      <Sidebar groups={groups} selected={selected} onSelect={select} />
+      <Sidebar
+        groups={groups}
+        selected={selected}
+        inboxSelected={view?.kind === 'inbox'}
+        inboxWaiting={waiting}
+        onSelect={(id) => navigate({ kind: 'chat', agentGroupId: id })}
+        onSelectInbox={() => navigate({ kind: 'inbox' })}
+      />
       <main className="main">
         {error && (
           <div className="error" role="alert" onClick={() => setError(null)}>
             {error}
           </div>
         )}
-        {current ? (
+        {view?.kind === 'inbox' ? (
+          <Inbox messages={inbox} onUpdated={(m) => setInbox((prev) => upsert(prev, m))} onError={setError} />
+        ) : current ? (
           <Chat
             key={current.id}
             group={current}

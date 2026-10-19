@@ -309,6 +309,60 @@ body {
   cursor: pointer;
 }
 
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.card-title {
+  font-weight: 600;
+}
+
+.card-body {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.card-button {
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  color: inherit;
+  font: inherit;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.card-button.primary {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #fff;
+}
+
+.card-button.danger {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.card-button[disabled] {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.card-resolution {
+  color: var(--fg-muted);
+  font-weight: 600;
+}
+
 @media (max-width: 640px) {
   .layout {
     grid-template-columns: 1fr;

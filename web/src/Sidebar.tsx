@@ -3,14 +3,36 @@ import type { AgentGroupSummary, ChatMessage } from './api';
 interface Props {
   groups: AgentGroupSummary[];
   selected: string | null;
+  inboxSelected: boolean;
+  inboxWaiting: number;
   onSelect: (id: string) => void;
+  onSelectInbox: () => void;
 }
 
-export function Sidebar({ groups, selected, onSelect }: Props) {
+export function Sidebar({ groups, selected, inboxSelected, inboxWaiting, onSelect, onSelectInbox }: Props) {
   return (
     <nav className="sidebar" aria-label="Agent">
       <div className="sidebar-title">Console</div>
       <ul>
+        <li>
+          <button
+            type="button"
+            className={['group', inboxSelected && 'selected', inboxWaiting > 0 && 'unread'].filter(Boolean).join(' ')}
+            onClick={onSelectInbox}
+          >
+            <span className="group-head">
+              <span className="group-name">Inbox</span>
+              {inboxWaiting > 0 && (
+                <span className="unread-badge" aria-label={`承認待ち ${inboxWaiting} 件`}>
+                  {inboxWaiting}
+                </span>
+              )}
+            </span>
+            <span className="group-excerpt">
+              {inboxWaiting > 0 ? `${inboxWaiting} 件の承認待ち` : '承認を待つものはありません'}
+            </span>
+          </button>
+        </li>
         {groups.map((g) => (
           <li key={g.id}>
             <button

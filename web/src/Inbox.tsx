@@ -1,0 +1,30 @@
+import { type ChatMessage } from './api';
+import { CardView } from './Card';
+
+interface Props {
+  messages: ChatMessage[];
+  onUpdated: (message: ChatMessage) => void;
+  onError: (message: string) => void;
+}
+
+/** The Owner's DM in the Console: Approval Requests and notices that belong to no Agent Group. */
+export function Inbox({ messages, onUpdated, onError }: Props) {
+  return (
+    <section className="chat">
+      <header className="chat-header">Inbox</header>
+      <div className="messages">
+        {messages.length === 0 && <div className="empty">承認を待つものはありません。</div>}
+        {messages.map((m) => (
+          <article key={m.id} className={`message ${m.role}`}>
+            {m.card ? (
+              <CardView message={{ ...m, card: m.card }} onAnswered={onUpdated} onError={onError} />
+            ) : (
+              m.text && <div className="message-text">{m.text}</div>
+            )}
+            <footer className="message-meta">{new Date(m.createdAt).toLocaleString()}</footer>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
