@@ -16,15 +16,16 @@ export class NoOwnSlackBotError extends Error {
 
 export interface SlackAvatars {
   /**
-   * Fetches, in the background, the Avatar of each listed Agent Group that has none cached. An Agent Group
-   * with its own Slack bot is tried once per Host run; one without is checked again on the next list.
+   * Brings the cached Slack Avatar of each listed Agent Group in line with its Slack bot, in the background:
+   * fetches it when missing and drops it once the bot is gone. An Agent Group with its own Slack bot is
+   * checked once per Host run; one without is checked again on the next list.
    */
   warm(agentGroupIds: string[]): void;
   refresh(agentGroupId: string): Promise<void>;
 }
 
 export function createSlackAvatars(store: ConsoleStore, onChange: () => void): SlackAvatars {
-  const attempted = new Set<string>();
+  const checked = new Set<string>();
 
   async function refresh(agentGroupId: string): Promise<void> {
     const token = await ownSlackBotTokenOf(agentGroupId);
@@ -33,15 +34,28 @@ export function createSlackAvatars(store: ConsoleStore, onChange: () => void): S
     onChange();
   }
 
+  async function warmOne(agentGroupId: string): Promise<void> {
+    const token = await ownSlackBotTokenOf(agentGroupId);
+    const cached = store.getAppearance(agentGroupId).hasSlackAvatar;
+    if (!token) {
+      checked.delete(agentGroupId);
+      if (!cached) return;
+      store.setAvatar(agentGroupId, 'slack', null);
+      return onChange();
+    }
+    if (cached) return;
+    store.setAvatar(agentGroupId, 'slack', await fetchBotImage(token));
+    onChange();
+  }
+
   return {
     warm(agentGroupIds) {
       for (const id of agentGroupIds) {
-        if (attempted.has(id) || store.getAppearance(id).hasSlackAvatar) continue;
-        attempted.add(id);
-        refresh(id).catch((err) => {
-          if (err instanceof NoOwnSlackBotError) return attempted.delete(id);
-          log.warn('Console could not fetch the Slack bot image for an Avatar', { agentGroupId: id, err });
-        });
+        if (checked.has(id)) continue;
+        checked.add(id);
+        warmOne(id).catch((err) =>
+          log.warn('Console could not fetch the Slack bot image for an Avatar', { agentGroupId: id, err }),
+        );
       }
     },
     refresh,

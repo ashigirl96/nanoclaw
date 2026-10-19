@@ -363,6 +363,24 @@ describe('Slack avatar', () => {
     expect(calls).toEqual([]);
   });
 
+  it('drops the cached image once the Slack bot is gone, falling back to the initial', async () => {
+    ENV.SLACK_BOT_TOKEN_ALPHA = 'xoxb-alpha';
+    await wireSlack('ag-a', 'slack-alpha', '2026-10-03T00:00:00.000Z');
+    fakeSlack(botProfile('https://avatars.slack-edge.com/bot.png'), {
+      'https://avatars.slack-edge.com/bot.png': BOT_PNG,
+    });
+    await listUntilAvatar('ag-a');
+
+    delete ENV.SLACK_BOT_TOKEN_ALPHA;
+    await h.restart();
+    const events = await h.openEvents();
+    await events.next(0);
+    await h.api('/api/agent-groups');
+    await events.ofType('agent-groups', 1);
+    events.close();
+    expect((await summaryOf('ag-a')).avatarUrl).toBeNull();
+  });
+
   it('says why Slack から取り直す could not refetch', async () => {
     expect((await h.api<{ ownSlackBot: boolean }>('/api/agent-groups/ag-b')).ownSlackBot).toBe(false);
     const none = await send('/api/agent-groups/ag-b/avatar/slack', {});
