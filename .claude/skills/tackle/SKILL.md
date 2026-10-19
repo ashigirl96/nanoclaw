@@ -14,7 +14,7 @@ spec または ticket でユーザーが記述した作業を、実装から mer
 
 Skill tool の `implement` を呼び、その手順に従う。手順の中の読み替えは次のとおり。
 
-- 最後に 1 回流すテストスイート全体は `sh scripts/check.sh`（CI の `test` job と同じ検査）。
+- テストスイート全体は手元で流さず、PR の CI の `gate` に任せる。手元では型チェック（`pnpm exec tsc --noEmit`、`container/agent-runner/` を触ったら `pnpm exec tsc -p container/agent-runner/tsconfig.json --noEmit` も）と、触ったテストファイルだけを流す。
 - code-review の fixed point は `git merge-base origin/main HEAD` で出した SHA にする。worktree のローカルの `main` は古いことがあり、他の PR の変更が diff に混ざるため。`$(...)` を含む git は worktree の session の guard が拒むので、SHA は先に出しておく。この時点の変更はまだコミットしていないので、新しいファイルを `git add -N` で載せてから `git diff <SHA>` で渡す。
 - コミットメッセージは scratchpad の file に書き、`git commit -F <file>` で渡す。worktree の session の guard は、heredoc やつないだコマンドで打つ git を拒むため。
 
@@ -32,7 +32,7 @@ Skill tool の `retro` をこの session に対して呼び、今後の run に�
 
 ## 6. merge する
 
-`gh pr view <PR> -R ashigirl96/nanoclaw --json mergeable` で `MERGEABLE` であることを確かめる。`CONFLICTING` なら origin/main を merge して衝突を解き、`sh scripts/check.sh` が通ったら push する。衝突している PR では CI が走らず、`gh pr checks` は古い commit の結果を返すため。
+`gh pr view <PR> -R ashigirl96/nanoclaw --json mergeable` で `MERGEABLE` であることを確かめる。`CONFLICTING` なら origin/main を merge して衝突を解き、型チェックが通ったら push する。衝突している PR では CI が走らず、`gh pr checks` は古い commit の結果を返すため。
 
 `gh pr checks <PR> -R ashigirl96/nanoclaw --watch --required` で必須の `gate` が通ったのを確かめてから、merge してよいかをユーザーに尋ねる。了承を得たら `gh pr merge <PR> -R ashigirl96/nanoclaw --merge` で merge する。この fork は merge commit で main に入れている。
 

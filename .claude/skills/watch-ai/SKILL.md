@@ -32,7 +32,7 @@ bash <base directory>/codex-return.sh wait ashigirl96/nanoclaw <PR> <requested_a
 
 ## 4. 指摘に対応する
 
-1. 妥当な指摘は working tree で直し、`sh scripts/check.sh` が通ったら 1 コミットにまとめて push する。妥当でない指摘には、直さない理由だけを返信する。返信は `@codex` を付けずに書く。付けると Codex がフォローアップとして作業を始め、local の修正と競合する。
+1. 妥当な指摘は working tree で直し、型チェックと触ったテストファイルが通ったら 1 コミットにまとめて push する。テストスイート全体は PR の CI に任せる。妥当でない指摘には、直さない理由だけを返信する。返信は `@codex` を付けずに書く。付けると Codex がフォローアップとして作業を始め、local の修正と競合する。
 2. 対応した codex のコメントに 👍 を付ける。今回の指摘コメントがすべて「修正 or 返信」と 👍 を済ませたら次へ進む。
 
    ```bash
