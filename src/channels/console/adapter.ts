@@ -8,6 +8,7 @@ import { log } from '../../log.js';
 import type { ChannelAdapter, ChannelSetup } from '../adapter.js';
 import { ActivityBoard, currentToolOf, isMidTurn } from './activity.js';
 import { answersRoute } from './answers.js';
+import { appearanceOf, appearanceRoute } from './appearance.js';
 import { isAnswerable } from './cards.js';
 import {
   CHANNEL_TYPE,
@@ -28,6 +29,7 @@ import {
   readJson,
   requireAgentGroup,
   sendJson,
+  sendStoredBytes,
 } from './http.js';
 import { inboxRoute } from './inbox.js';
 import { mimeTypeFor } from './mime.js';
@@ -36,6 +38,7 @@ import { noticeFor } from './notify.js';
 import { panelRoute } from './panel.js';
 import { cardOf } from './questions.js';
 import { settingsRoute } from './settings.js';
+import { type SlackAvatars, createSlackAvatars } from './slack-avatar.js';
 import { serveStatic } from './static.js';
 import { type ChatMessage, ConsoleStore, type NewFile } from './store.js';
 import { broadcastUnread, readRoute } from './unread.js';
@@ -50,7 +53,15 @@ export interface ConsoleAdapter extends ChannelAdapter {
   url(): string;
 }
 
-const ROUTES: Route[] = [answersRoute, inboxRoute, readRoute, panelRoute, newAgentRoute, settingsRoute];
+const ROUTES: Route[] = [
+  appearanceRoute,
+  answersRoute,
+  inboxRoute,
+  readRoute,
+  panelRoute,
+  newAgentRoute,
+  settingsRoute,
+];
 
 export function consoleAdapterFromEnv(env: Record<string, string | undefined>): ConsoleAdapter | null {
   if (!env.CONSOLE_PORT) return null;
@@ -65,6 +76,7 @@ export function consoleAdapterFromEnv(env: Record<string, string | undefined>): 
 export function createConsoleAdapter(opts: ConsoleOptions): ConsoleAdapter {
   let server: http.Server | null = null;
   let store: ConsoleStore | null = null;
+  let slackAvatars: SlackAvatars | null = null;
   let setupConfig: ChannelSetup | null = null;
   let stopWatchingAgentGroups: (() => void) | null = null;
   const subscribers = new Set<http.ServerResponse>();
@@ -126,12 +138,14 @@ export function createConsoleAdapter(opts: ConsoleOptions): ConsoleAdapter {
 
     if (route === 'GET /api/agent-groups') {
       const groups = await getAllAgentGroups();
+      slackAvatars!.warm(groups.map((g) => g.id));
       return sendJson(
         res,
         200,
         groups.map((g) => ({
           id: g.id,
           name: g.name,
+          ...appearanceOf(store!, g.id),
           lastMessage: store!.lastMessage(g.id),
           activity: activity.get(g.id),
           unread: store!.unreadCount(g.id),
@@ -143,15 +157,19 @@ export function createConsoleAdapter(opts: ConsoleOptions): ConsoleAdapter {
     if (file) {
       const stored = store!.getFile(decodeURIComponent(file[1]));
       if (!stored) throw new HttpError(404, 'unknown file');
-      res.writeHead(200, {
-        'content-type': stored.mimeType,
+      return sendStoredBytes(res, stored.mimeType, stored.data, {
         'content-disposition': `inline; filename*=UTF-8''${encodeURIComponent(stored.name)}`,
-        'x-content-type-options': 'nosniff',
-        // Chrome's PDF viewer refuses to render inside a sandboxed document.
-        ...(stored.mimeType !== 'application/pdf' && { 'content-security-policy': 'sandbox' }),
       });
-      res.end(stored.data);
-      return;
+    }
+
+    const avatar = /^GET \/api\/agent-groups\/([^/]+)\/avatar$/.exec(route);
+    if (avatar) {
+      const image = store!.getAvatar(decodeURIComponent(avatar[1]));
+      if (!image) throw new HttpError(404, 'no avatar');
+      // The URL carries the Avatar's version, so a changed Avatar gets a new URL.
+      return sendStoredBytes(res, image.mimeType, image.data, {
+        'cache-control': 'private, max-age=31536000, immutable',
+      });
     }
 
     const chat = /^(GET|POST) \/api\/agent-groups\/([^/]+)\/(open|messages)$/.exec(route);
@@ -172,6 +190,7 @@ export function createConsoleAdapter(opts: ConsoleOptions): ConsoleAdapter {
 
     const ctx: RouteContext = {
       store: store!,
+      slackAvatars: slackAvatars!,
       readBody: () => readJson(req),
       broadcast,
       sendFromOwner,
@@ -196,6 +215,7 @@ export function createConsoleAdapter(opts: ConsoleOptions): ConsoleAdapter {
     async setup(config: ChannelSetup): Promise<void> {
       setupConfig = config;
       store = new ConsoleStore(path.join(opts.dataDir, 'console.db'));
+      slackAvatars = createSlackAvatars(store, () => broadcast({ type: 'agent-groups' }));
       stopWatchingAgentGroups = onAgentGroupsChanged(() => broadcast({ type: 'agent-groups' }));
       server = http.createServer((req, res) => {
         handle(req, res).catch((err) => {

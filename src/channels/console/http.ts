@@ -4,6 +4,7 @@ import { getAgentGroup } from '../../db/agent-groups.js';
 import type { ChannelSetup } from '../adapter.js';
 import type { Activity } from './activity.js';
 import type { Notice } from './notify.js';
+import type { SlackAvatars } from './slack-avatar.js';
 import type { ChatMessage, ConsoleStore } from './store.js';
 
 const MAX_BODY_BYTES = 50 * 1024 * 1024;
@@ -26,6 +27,7 @@ export type ConsoleEvent =
 
 export interface RouteContext {
   store: ConsoleStore;
+  slackAvatars: SlackAvatars;
   readBody(): Promise<Record<string, unknown>>;
   broadcast(event: ConsoleEvent): void;
   sendFromOwner(agentGroupId: string, body: Record<string, unknown>): Promise<ChatMessage>;
@@ -52,6 +54,23 @@ export async function requireAgentGroup(id: string): Promise<string> {
 export function sendJson(res: http.ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'content-type': 'application/json' });
   res.end(JSON.stringify(body));
+}
+
+/** Sends stored bytes under the type they were stored with, never as a document that can run script. */
+export function sendStoredBytes(
+  res: http.ServerResponse,
+  mimeType: string,
+  data: Buffer,
+  headers: http.OutgoingHttpHeaders = {},
+): void {
+  res.writeHead(200, {
+    'content-type': mimeType,
+    'x-content-type-options': 'nosniff',
+    // Chrome's PDF viewer refuses to render inside a sandboxed document.
+    ...(mimeType !== 'application/pdf' && { 'content-security-policy': 'sandbox' }),
+    ...headers,
+  });
+  res.end(data);
 }
 
 export async function readJson(req: http.IncomingMessage): Promise<Record<string, unknown>> {

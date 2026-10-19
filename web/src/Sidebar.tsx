@@ -85,10 +85,12 @@ export function Sidebar({ groups, selected, inboxSelected, inboxWaiting, onSelec
               <Avatar
                 id={g.id}
                 name={g.name}
+                url={g.avatarUrl}
                 badge={g.activity.working && <span className="working-dot" title="作業中" aria-label="作業中" />}
               />
               <span className="group-text">
                 <span className="group-name">{g.name}</span>
+                {g.label && <span className="group-label">{g.label}</span>}
                 <span className="group-excerpt">{excerpt(g.lastMessage)}</span>
               </span>
               {g.unread > 0 && (

@@ -38,7 +38,7 @@ export function Chat({ group, messages, onSent, onError, panelOpen, onTogglePane
       <div className="chat-scroll">
         <div className="chat-title">
           <button type="button" className="chat-pill" aria-expanded={panelOpen} onClick={onTogglePanel}>
-            <Avatar id={group.id} name={group.name} size="sm" />
+            <Avatar id={group.id} name={group.name} url={group.avatarUrl} size="sm" />
             {group.name}
           </button>
           {headerAction}

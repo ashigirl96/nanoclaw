@@ -93,6 +93,10 @@ describe('details', () => {
       name: 'Alice',
       folder: 'alice',
       createdAt: '2026-10-01T00:00:00.000Z',
+      label: null,
+      avatarUrl: null,
+      avatarSource: null,
+      ownSlackBot: false,
     });
   });
 });

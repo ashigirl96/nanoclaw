@@ -34,6 +34,31 @@ export interface NewFile {
   data: Buffer;
 }
 
+export type AvatarSource = 'upload' | 'slack';
+
+export interface Image {
+  mimeType: string;
+  data: Buffer;
+}
+
+export interface Appearance {
+  label: string | null;
+  /** The Avatar shown, upload first; null when neither is stored. */
+  avatar: { source: AvatarSource; updatedAt: string } | null;
+  hasSlackAvatar: boolean;
+}
+
+interface AppearanceRow {
+  label: string | null;
+  uploaded_avatar_at: string | null;
+  slack_avatar_at: string | null;
+}
+
+const AVATAR_COLUMNS: Record<AvatarSource, { type: string; data: string; at: string }> = {
+  upload: { type: 'uploaded_avatar_type', data: 'uploaded_avatar', at: 'uploaded_avatar_at' },
+  slack: { type: 'slack_avatar_type', data: 'slack_avatar', at: 'slack_avatar_at' },
+};
+
 interface MessageRow {
   id: string;
   agent_group_id: string;
@@ -78,6 +103,16 @@ const MIGRATIONS = [
      last_read_seq INTEGER NOT NULL
    );`,
   `ALTER TABLE messages ADD COLUMN card TEXT;`,
+  `CREATE TABLE agent_group_appearance (
+     agent_group_id TEXT PRIMARY KEY,
+     label TEXT,
+     uploaded_avatar_type TEXT,
+     uploaded_avatar BLOB,
+     uploaded_avatar_at TEXT,
+     slack_avatar_type TEXT,
+     slack_avatar BLOB,
+     slack_avatar_at TEXT
+   );`,
 ];
 
 // agent_group_id is NOT NULL, and no Agent Group can have an empty id.
@@ -231,6 +266,49 @@ export class ConsoleStore {
       mimeType: r.mime_type,
       createdAt: r.created_at,
     }));
+  }
+
+  getAppearance(agentGroupId: string): Appearance {
+    const row = this.db
+      .prepare('SELECT label, uploaded_avatar_at, slack_avatar_at FROM agent_group_appearance WHERE agent_group_id = ?')
+      .get(agentGroupId) as AppearanceRow | undefined;
+    const avatar = row?.uploaded_avatar_at
+      ? { source: 'upload' as const, updatedAt: row.uploaded_avatar_at }
+      : row?.slack_avatar_at
+        ? { source: 'slack' as const, updatedAt: row.slack_avatar_at }
+        : null;
+    return { label: row?.label ?? null, avatar, hasSlackAvatar: Boolean(row?.slack_avatar_at) };
+  }
+
+  setLabel(agentGroupId: string, label: string | null): void {
+    this.db
+      .prepare(
+        `INSERT INTO agent_group_appearance (agent_group_id, label) VALUES (?, ?)
+         ON CONFLICT (agent_group_id) DO UPDATE SET label = excluded.label`,
+      )
+      .run(agentGroupId, label);
+  }
+
+  /** A null `image` removes the Avatar from that source. */
+  setAvatar(agentGroupId: string, source: AvatarSource, image: Image | null): void {
+    const c = AVATAR_COLUMNS[source];
+    this.db
+      .prepare(
+        `INSERT INTO agent_group_appearance (agent_group_id, ${c.type}, ${c.data}, ${c.at}) VALUES (?, ?, ?, ?)
+         ON CONFLICT (agent_group_id) DO UPDATE
+           SET ${c.type} = excluded.${c.type}, ${c.data} = excluded.${c.data}, ${c.at} = excluded.${c.at}`,
+      )
+      .run(agentGroupId, image?.mimeType ?? null, image?.data ?? null, image ? new Date().toISOString() : null);
+  }
+
+  getAvatar(agentGroupId: string): Image | null {
+    const source = this.getAppearance(agentGroupId).avatar?.source;
+    if (!source) return null;
+    const c = AVATAR_COLUMNS[source];
+    const row = this.db
+      .prepare(`SELECT ${c.type} AS mime_type, ${c.data} AS data FROM agent_group_appearance WHERE agent_group_id = ?`)
+      .get(agentGroupId) as { mime_type: string; data: Buffer };
+    return { mimeType: row.mime_type, data: row.data };
   }
 
   close(): void {

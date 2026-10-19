@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { type ReactNode, useState } from 'react';
 
 const PALETTE = ['#f26b3a', '#f5a524', '#3fbf7f', '#3b9eff', '#a07cf7', '#ef5da8', '#2dc2c2', '#e8e8e8'];
 
@@ -11,11 +11,21 @@ function hash(text: string): number {
 interface Props {
   id: string;
   name: string;
+  url?: string | null;
   size?: 'sm' | 'md' | 'lg';
   badge?: ReactNode;
 }
 
-export function Avatar({ id, name, size = 'md', badge }: Props) {
+export function Avatar({ id, name, url, size = 'md', badge }: Props) {
+  const [broken, setBroken] = useState<string | null>(null);
+  if (url && broken !== url) {
+    return (
+      <span className={`avatar ${size}`} aria-hidden="true">
+        <img className="avatar-image" src={url} alt="" onError={() => setBroken(url)} />
+        {badge}
+      </span>
+    );
+  }
   const color = PALETTE[hash(id) % PALETTE.length];
   const initial = [...name.trim()][0]?.toUpperCase() ?? '?';
   return (
