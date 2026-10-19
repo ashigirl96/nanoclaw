@@ -9,7 +9,7 @@ export interface Routine {
   status: 'pending' | 'paused';
   /** The cron expression, or `once`. */
   schedule: string;
-  nextRun: string;
+  nextRun: string | null;
   lastRun: string | null;
   runs: number;
   failedRuns: number;
@@ -42,5 +42,5 @@ export async function listRoutines(agentGroupId: string): Promise<Routine[]> {
       routines.push({ ...row, lastResult: log[0] ?? null });
     }
   }
-  return routines.sort((a, b) => a.nextRun.localeCompare(b.nextRun));
+  return routines.sort((a, b) => (a.nextRun ?? '￿').localeCompare(b.nextRun ?? '￿'));
 }

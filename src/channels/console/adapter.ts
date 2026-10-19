@@ -14,12 +14,13 @@ import {
   ensureConsoleChat,
   platformIdFor,
 } from './chat.js';
+import { onAgentGroupsChanged } from './create-agent.js';
 import { mimeTypeFor } from './mime.js';
 import { panelRoute } from './panel.js';
 import { serveStatic } from './static.js';
 import { type ChatMessage, ConsoleStore, type NewFile } from './store.js';
 
-type ConsoleEvent = { type: 'message'; message: ChatMessage };
+type ConsoleEvent = { type: 'message'; message: ChatMessage } | { type: 'agent-groups' };
 
 export interface ConsoleOptions {
   port: number;
@@ -56,6 +57,7 @@ export function createConsoleAdapter(opts: ConsoleOptions): ConsoleAdapter {
   let server: http.Server | null = null;
   let store: ConsoleStore | null = null;
   let setupConfig: ChannelSetup | null = null;
+  let stopWatchingAgentGroups: (() => void) | null = null;
   const subscribers = new Set<http.ServerResponse>();
 
   function broadcast(event: ConsoleEvent): void {
@@ -172,6 +174,7 @@ export function createConsoleAdapter(opts: ConsoleOptions): ConsoleAdapter {
     async setup(config: ChannelSetup): Promise<void> {
       setupConfig = config;
       store = new ConsoleStore(path.join(opts.dataDir, 'console.db'));
+      stopWatchingAgentGroups = onAgentGroupsChanged(() => broadcast({ type: 'agent-groups' }));
       server = http.createServer((req, res) => {
         handle(req, res).catch((err) => {
           if (err instanceof HttpError) return sendJson(res, err.status, { error: err.message });
@@ -187,6 +190,7 @@ export function createConsoleAdapter(opts: ConsoleOptions): ConsoleAdapter {
     },
 
     async teardown(): Promise<void> {
+      stopWatchingAgentGroups?.();
       if (server) {
         server.closeAllConnections();
         await new Promise<void>((resolve) => server!.close(() => resolve()));
