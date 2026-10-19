@@ -1,26 +1,26 @@
 import type { OutboundMessage } from '../adapter.js';
-import { agentGroupIdFrom } from './chat.js';
+import { type ConsoleChat, storeKeyOf } from './chat.js';
 
 export type NoticeKind = 'reply' | 'question' | 'approval';
 
 /** What the browser announces when the Console tab is in the background. */
 export interface Notice {
   kind: NoticeKind;
-  /** null for the Inbox: an Approval Request goes to the Owner's DM, not to an Agent Group's Chat. */
+  /** null for the Inbox. */
   agentGroupId: string | null;
   body: string;
 }
 
-export function noticeFor(platformId: string, message: OutboundMessage): Notice | null {
+export function noticeFor(chat: ConsoleChat, message: OutboundMessage): Notice | null {
   const content = (message.content ?? {}) as Record<string, unknown>;
   if (typeof content.operation === 'string') return null;
-  const agentGroupId = agentGroupIdFrom(platformId);
+  const agentGroupId = storeKeyOf(chat);
 
   if (content.type === 'ask_question' || content.type === 'post_question') {
     const body = stringOr(content.question, stringOr(content.title, ''));
-    return { kind: agentGroupId ? 'question' : 'approval', agentGroupId, body };
+    return { kind: chat.kind === 'inbox' ? 'approval' : 'question', agentGroupId, body };
   }
-  if (!agentGroupId) return null;
+  if (chat.kind === 'inbox') return null;
 
   const card = (content.card ?? {}) as Record<string, unknown>;
   const body =

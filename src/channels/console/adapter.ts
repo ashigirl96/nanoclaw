@@ -16,6 +16,7 @@ import {
   ensureConsoleChat,
   platformIdFor,
   platformIdOfChat,
+  storeKeyOf,
 } from './chat.js';
 import { onAgentGroupsChanged } from './create-agent.js';
 import { mimeTypeFor } from './mime.js';
@@ -293,17 +294,18 @@ export function createConsoleAdapter(opts: ConsoleOptions): ConsoleAdapter {
     },
 
     async deliver(platformId, _threadId, message): Promise<string | undefined> {
-      const agentGroupId = chatOf(platformId);
       if (!store) return undefined;
-      const notice = noticeFor(platformId, message);
-      if (notice) broadcast({ type: 'notify', ...notice });
-      if (agentGroupId === undefined) {
+      const chat = chatOf(platformId);
+      if (!chat) {
         log.warn('Console dropped an Outbound Message for a platform id it has no Chat for', {
           platformId,
           kind: message.kind,
         });
         return undefined;
       }
+      const agentGroupId = storeKeyOf(chat);
+      const notice = noticeFor(chat, message);
+      if (notice) broadcast({ type: 'notify', ...notice });
       const content = (message.content ?? {}) as Record<string, unknown>;
 
       if (content.operation === 'edit' && typeof content.messageId === 'string') {

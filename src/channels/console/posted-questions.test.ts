@@ -8,6 +8,7 @@ import type { ChannelSetup, InboundMessage } from '../adapter.js';
 import { closeDb, initTestDb, runMigrations } from '../../db/index.js';
 import { createAgentGroup } from '../../db/agent-groups.js';
 import { createConsoleAdapter, type ConsoleAdapter } from './adapter.js';
+import { chatOf } from './chat.js';
 import { noticeFor } from './notify.js';
 
 let tmp: string;
@@ -227,7 +228,10 @@ describe('a form from post_question', () => {
 describe('the notification for a posted Question', () => {
   it('announces it as a Question in the Agent Group', () => {
     expect(
-      noticeFor('web:ag-a', { kind: 'chat-sdk', content: { type: 'post_question', questionId: 'msg-1', ...form } }),
+      noticeFor(chatOf('web:ag-a')!, {
+        kind: 'chat-sdk',
+        content: { type: 'post_question', questionId: 'msg-1', ...form },
+      }),
     ).toEqual({ kind: 'question', agentGroupId: 'ag-a', body: 'What do you want?' });
   });
 });

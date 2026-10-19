@@ -32,10 +32,17 @@ export function agentGroupIdFrom(platformId: string): string | null {
 // The Console has no openDM, so ensureUserDm makes the handle of web:owner the platform id of the Owner's DM.
 export const INBOX_PLATFORM_ID = OWNER_USER_ID.slice(CHANNEL_TYPE.length + 1);
 
-/** The Chat a platform id points at: an Agent Group's Chat, the Inbox (null), or none (undefined). */
-export function chatOf(platformId: string): string | null | undefined {
-  if (platformId === INBOX_PLATFORM_ID) return null;
-  return agentGroupIdFrom(platformId) ?? undefined;
+export type ConsoleChat = { kind: 'inbox' } | { kind: 'agent-group'; agentGroupId: string };
+
+export function chatOf(platformId: string): ConsoleChat | null {
+  if (platformId === INBOX_PLATFORM_ID) return { kind: 'inbox' };
+  const agentGroupId = agentGroupIdFrom(platformId);
+  return agentGroupId === null ? null : { kind: 'agent-group', agentGroupId };
+}
+
+/** The store's key for a Chat, where null stands for the Inbox. */
+export function storeKeyOf(chat: ConsoleChat): string | null {
+  return chat.kind === 'inbox' ? null : chat.agentGroupId;
 }
 
 export function platformIdOfChat(agentGroupId: string | null): string {

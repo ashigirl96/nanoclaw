@@ -57,6 +57,18 @@ describe('notifications', () => {
     events.close();
   });
 
+  it('stays quiet for a message it drops because no Chat has its platform id', async () => {
+    const events = await h.openEvents();
+
+    await h.adapter.deliver('elsewhere', null, { kind: 'chat-sdk', content: question });
+    await h.adapter.deliver('web:ag-a', null, { kind: 'chat', content: { text: 'next' } });
+
+    expect(await events.ofType('notify', 1)).toEqual([
+      { type: 'notify', kind: 'reply', agentGroupId: 'ag-a', body: 'next' },
+    ]);
+    events.close();
+  });
+
   it('stays quiet for edits and reactions', async () => {
     const id = await h.adapter.deliver('web:ag-a', null, { kind: 'chat', content: { text: 'draft' } });
     const events = await h.openEvents();
