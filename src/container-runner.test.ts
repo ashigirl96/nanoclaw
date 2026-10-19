@@ -34,6 +34,12 @@ vi.mock('./log.js', () => ({
   log: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn(), fatal: vi.fn() },
 }));
 
+// The defaults below must not read the operator's own .env (e.g. CONTAINER_MEMORY_LIMIT=8g).
+vi.mock('./env.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./env.js')>()),
+  readEnvFile: () => ({}),
+}));
+
 afterEach(() => resetGatewayProvider());
 
 describe('resolveProviderName', () => {
