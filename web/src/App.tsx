@@ -3,7 +3,9 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { type AgentGroupSummary, type ChatMessage, type ConsoleEvent, api, subscribe } from './api';
 import { Chat } from './Chat';
 import { Inbox } from './Inbox';
+import { NewAgentDialog } from './NewAgentDialog';
 import { announce, isForeground, useForeground, useNotificationPermission } from './notifications';
+import { Panel } from './Panel';
 import { Sidebar } from './Sidebar';
 
 type View = { kind: 'inbox' } | { kind: 'chat'; agentGroupId: string } | null;
@@ -20,6 +22,7 @@ export function App() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inbox, setInbox] = useState<ChatMessage[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
   const selected = view?.kind === 'chat' ? view.agentGroupId : null;
 
   useEffect(() => {
@@ -63,6 +66,8 @@ export function App() {
           setGroups((prev) => prev.map((g) => (g.id === event.agentGroupId ? { ...g, activity: event.activity } : g)));
         } else if (event.type === 'unread') {
           setGroups((prev) => prev.map((g) => (g.id === event.agentGroupId ? { ...g, unread: event.unread } : g)));
+        } else if (event.type === 'agent-groups') {
+          api.agentGroups().then(setGroups, (err: Error) => setError(err.message));
         } else if (event.type === 'notify') {
           const target = event.agentGroupId;
           const name = target ? (groupsRef.current.find((g) => g.id === target)?.name ?? target) : 'Inbox';
@@ -85,8 +90,17 @@ export function App() {
   useEffect(markSeen, [markSeen]);
   useForeground(markSeen);
 
+  const created = useCallback(
+    async (id: string) => {
+      setCreating(false);
+      setGroups(await api.agentGroups());
+      navigate({ kind: 'chat', agentGroupId: id });
+    },
+    [navigate],
+  );
+
   return (
-    <div className="layout">
+    <div className={current ? 'layout with-panel' : 'layout'}>
       <Sidebar
         groups={groups}
         selected={selected}
@@ -94,7 +108,9 @@ export function App() {
         inboxWaiting={waiting}
         onSelect={(id) => navigate({ kind: 'chat', agentGroupId: id })}
         onSelectInbox={() => navigate({ kind: 'inbox' })}
+        onNewAgent={() => setCreating(true)}
       />
+      {creating && <NewAgentDialog onCreated={(id) => void created(id)} onClose={() => setCreating(false)} />}
       <main className="main">
         {error && (
           <div className="error" role="alert" onClick={() => setError(null)}>
@@ -115,6 +131,7 @@ export function App() {
           <div className="empty">左の一覧から Agent を選んでください。</div>
         )}
       </main>
+      {current && <Panel key={current.id} agentGroupId={current.id} revision={messages.length} onError={setError} />}
     </div>
   );
 }

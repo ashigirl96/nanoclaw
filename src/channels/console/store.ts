@@ -10,6 +10,11 @@ export interface StoredFile {
   mimeType: string;
 }
 
+export interface LibraryFile extends StoredFile {
+  messageId: string;
+  createdAt: string;
+}
+
 export interface ChatMessage {
   id: string;
   /** null for the Inbox, which belongs to no Agent Group. */
@@ -208,6 +213,25 @@ export class ConsoleStore {
       | (FileRow & { data: Buffer })
       | undefined;
     return row ? { id: row.id, name: row.name, mimeType: row.mime_type, data: row.data } : null;
+  }
+
+  /** The Agent Group's Library: files its Agent delivered, newest first. */
+  listAgentFiles(agentGroupId: string): LibraryFile[] {
+    const rows = this.db
+      .prepare(
+        `SELECT f.id, f.message_id, f.name, f.mime_type, m.created_at
+           FROM files f JOIN messages m ON m.id = f.message_id
+          WHERE m.agent_group_id = ? AND m.role = 'agent'
+          ORDER BY m.seq DESC, f.rowid DESC`,
+      )
+      .all(agentGroupId) as Array<FileRow & { created_at: string }>;
+    return rows.map((r) => ({
+      id: r.id,
+      messageId: r.message_id,
+      name: r.name,
+      mimeType: r.mime_type,
+      createdAt: r.created_at,
+    }));
   }
 
   close(): void {
