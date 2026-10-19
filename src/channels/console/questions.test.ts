@@ -2,12 +2,20 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import Database from 'better-sqlite3';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+const sessionsRoot = vi.hoisted(() => `${process.env.TMPDIR ?? '/tmp'}/console-questions-${process.pid}`);
+vi.mock('../../config.js', async () => {
+  const actual = await vi.importActual<typeof import('../../config.js')>('../../config.js');
+  return { ...actual, DATA_DIR: sessionsRoot };
+});
 
 import type { ChannelSetup, InboundMessage } from '../adapter.js';
 import { closeDb, initTestDb, runMigrations } from '../../db/index.js';
 import { createAgentGroup } from '../../db/agent-groups.js';
 import { createPendingQuestion, createSession, deletePendingQuestion } from '../../db/sessions.js';
+import { inboundDbPath, outboundDbPath } from '../../mailbox/sqlite/paths.js';
 import { createConsoleAdapter, type ConsoleAdapter } from './adapter.js';
 
 let tmp: string;
@@ -47,6 +55,40 @@ async function api<T = unknown>(pathname: string, init?: RequestInit): Promise<T
 const history = () => api<ChatMessage[]>('/api/agent-groups/ag-a/messages');
 const answer = (messageId: string, value: string) =>
   api<ChatMessage>(`/api/messages/${messageId}/answer`, { method: 'POST', body: JSON.stringify({ value }) });
+
+/** What ask_user_question in the Container sees when it polls for the answer now. */
+function pollAnswer(questionId: string): { id: string; selectedOption: string } | null {
+  const inbound = new Database(inboundDbPath('ag-a', 'sess-1'), { readonly: true });
+  const outbound = new Database(outboundDbPath('ag-a', 'sess-1'));
+  try {
+    const row = inbound
+      .prepare("SELECT id, content FROM messages_in WHERE status = 'pending' AND content LIKE ?")
+      .get(`%"questionId":"${questionId}"%`) as { id: string; content: string } | undefined;
+    if (!row || outbound.prepare('SELECT 1 FROM processing_ack WHERE message_id = ?').get(row.id)) return null;
+    return { id: row.id, selectedOption: (JSON.parse(row.content) as { selectedOption: string }).selectedOption };
+  } finally {
+    inbound.close();
+    outbound.close();
+  }
+}
+
+/** ask_user_question still blocking in the Container: takes the answer once it shows up, as the tool does. */
+async function waitingTool(questionId: string): Promise<string | null> {
+  const deadline = Date.now() + 8000;
+  while (Date.now() < deadline) {
+    const answer = fs.existsSync(inboundDbPath('ag-a', 'sess-1')) ? pollAnswer(questionId) : null;
+    if (answer) {
+      const outbound = new Database(outboundDbPath('ag-a', 'sess-1'));
+      outbound
+        .prepare("INSERT INTO processing_ack (message_id, status, status_changed) VALUES (?, 'completed', ?)")
+        .run(answer.id, new Date().toISOString());
+      outbound.close();
+      return answer.selectedOption;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  return null;
+}
 
 /** Delivers an Agent's Question the way delivery.ts does: the pending row first, then the card. */
 async function askQuestion(askedAt: Date): Promise<ChatMessage> {
@@ -110,6 +152,7 @@ afterEach(async () => {
   await adapter.teardown();
   await closeDb();
   fs.rmSync(tmp, { recursive: true, force: true });
+  fs.rmSync(sessionsRoot, { recursive: true, force: true });
 });
 
 describe('a Question from ask_user_question', () => {
@@ -125,32 +168,43 @@ describe('a Question from ask_user_question', () => {
 
   it('returns the answer as the tool result while the Agent waits', async () => {
     const card = await askQuestion(new Date());
+    const tool = waitingTool('q-1');
 
     await answer(card.id, 'ship');
 
-    expect(actions).toEqual([
-      { questionId: 'q-1', value: 'ship', userId: 'web:owner', messageId: card.id, platformId: 'web:ag-a' },
-    ]);
+    expect(await tool).toBe('ship');
     expect(inbound).toEqual([]);
+    expect(actions).toEqual([]);
     expect((await history()).at(-1)!.card).toMatchObject({ resolution: '🚀 Shipping' });
   });
 
-  it('sends a late answer as an Owner Chat Message naming the Question', async () => {
+  it('returns the answer to a tool that was given more than 300 seconds to wait', async () => {
     const card = await askQuestion(new Date(Date.now() - 10 * 60 * 1000));
+    const tool = waitingTool('q-1');
 
     await answer(card.id, 'ship');
 
-    expect(actions).toEqual([]);
+    expect(await tool).toBe('ship');
+    expect(inbound).toEqual([]);
+  });
+
+  it('sends the answer as an Owner Chat Message naming the Question once the tool stopped waiting', async () => {
+    // ask_user_question gave up early (a short timeout, or the turn was cancelled), so nothing takes the answer.
+    const card = await askQuestion(new Date());
+
+    await answer(card.id, 'ship');
+
     expect(inbound).toHaveLength(1);
     expect(inbound[0].platformId).toBe('web:ag-a');
     expect(inbound[0].message.content).toMatchObject({ senderId: 'web:owner' });
     const text = (inbound[0].message.content as { text: string }).text;
     expect(text).toContain('Deploy to production now?');
     expect(text).toContain('Ship it');
+    expect(pollAnswer('q-1')).toBeNull();
     const messages = await history();
     expect(messages.map((m) => m.role)).toEqual(['agent', 'owner']);
     expect(messages[0].card).toMatchObject({ resolution: '🚀 Shipping' });
-  });
+  }, 15_000);
 
   it('sends the answer as a Chat Message once the Host no longer tracks the Question', async () => {
     const card = await askQuestion(new Date());

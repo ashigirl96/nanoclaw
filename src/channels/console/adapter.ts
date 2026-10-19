@@ -26,6 +26,7 @@ import { panelRoute } from './panel.js';
 import { formAnswerOf } from './posted-questions.js';
 import { answerRoute, cardOf, lateAnswerText } from './questions.js';
 import { serveStatic } from './static.js';
+import { answerWaitingTool } from './waiting-tool.js';
 import { type ChatMessage, ConsoleStore, type NewFile } from './store.js';
 
 type ConsoleEvent =
@@ -138,8 +139,8 @@ export function createConsoleAdapter(opts: ConsoleOptions): ConsoleAdapter {
     if (card.resolution !== null) throw new HttpError(409, 'the card is already answered');
 
     const route = await answerRoute(card);
-    if (route !== 'deferred') {
-      const resolution = route === 'expired' ? EXPIRED_RESOLUTION : option.selectedLabel;
+    if (route.kind !== 'deferred') {
+      const resolution = route.kind === 'expired' ? EXPIRED_RESOLUTION : option.selectedLabel;
       const resolved = store!.updateCard(message.agentGroupId, message.id, (c) =>
         c.type !== 'links' && c.resolution === null ? { ...c, resolution } : null,
       );
@@ -147,13 +148,14 @@ export function createConsoleAdapter(opts: ConsoleOptions): ConsoleAdapter {
       broadcast({ type: 'message', message: resolved });
     }
 
-    if (route === 'chat' && message.agentGroupId !== null) {
-      await sendFromOwner(message.agentGroupId, { text: lateAnswerText(card, option) });
-    } else if (route !== 'expired') {
+    if (route.kind === 'action' || route.kind === 'deferred') {
       setupConfig!.onAction(card.questionId, option.value, OWNER_USER_ID, {
         messageId: message.id,
         platformId: platformIdOfChat(message.agentGroupId),
       });
+    } else if (route.kind !== 'expired' && message.agentGroupId !== null) {
+      const taken = route.kind === 'tool' && (await answerWaitingTool(route.pending, option.value));
+      if (!taken) await sendFromOwner(message.agentGroupId, { text: lateAnswerText(card, option) });
     }
     return store!.getMessage(message.id)!;
   }

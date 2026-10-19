@@ -1,4 +1,5 @@
 import { getPendingQuestion } from '../../db/sessions.js';
+import type { PendingQuestion } from '../../types.js';
 import { resolveQuestionRender } from '../question-render-registry.js';
 import { type Card, type ChoiceCard, choiceCardFrom, linkCardFrom } from './cards.js';
 import { postedCardOf } from './posted-questions.js';
@@ -19,30 +20,22 @@ export async function cardOf(content: Record<string, unknown>): Promise<{ card: 
   return { card, text: fallback || card.description || card.title };
 }
 
-/**
- * Where an answer goes:
- * - `action`: back to the Host through onAction; the card shows the answer right away.
- * - `deferred`: through onAction too, but the Host writes the result onto the card itself.
- * - `chat`: the Agent no longer waits, so the answer becomes an Owner Chat Message (ADR 0002).
- * - `expired`: an Approval Request the Host no longer holds.
- */
-export type AnswerRoute = 'action' | 'deferred' | 'chat' | 'expired';
+export type AnswerRoute =
+  | { kind: 'tool'; pending: PendingQuestion }
+  | { kind: 'chat' }
+  | { kind: 'action' }
+  // The Host writes the result onto the card itself.
+  | { kind: 'deferred' }
+  | { kind: 'expired' };
 
 export async function answerRoute(card: ChoiceCard): Promise<AnswerRoute> {
   if (card.type === 'question') {
     const pending = await getPendingQuestion(card.questionId);
-    return pending && isStillWaiting(pending.created_at) ? 'action' : 'chat';
+    return pending ? { kind: 'tool', pending } : { kind: 'chat' };
   }
   const render = await resolveQuestionRender(card.questionId);
-  if (!render) return 'expired';
-  return render.deferResolution ? 'deferred' : 'action';
-}
-
-// ask_user_question waits 300s by default; the margin covers the delay between the Agent asking and the card arriving.
-const AGENT_WAIT_MS = 290 * 1000;
-
-function isStillWaiting(deliveredAt: string): boolean {
-  return Date.now() - Date.parse(deliveredAt) < AGENT_WAIT_MS;
+  if (!render) return { kind: 'expired' };
+  return { kind: render.deferResolution ? 'deferred' : 'action' };
 }
 
 /** The Owner Chat Message that carries a late answer, naming the Question it answers. */
