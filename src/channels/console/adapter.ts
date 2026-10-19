@@ -3,9 +3,9 @@ import type { AddressInfo } from 'net';
 import path from 'path';
 
 import { DATA_DIR } from '../../config.js';
-import { getAllAgentGroups } from '../../db/agent-groups.js';
+import { getAgentGroup, getAllAgentGroups } from '../../db/agent-groups.js';
 import { log } from '../../log.js';
-import type { ChannelAdapter, ChannelSetup } from '../adapter.js';
+import type { ChannelAdapter, ChannelSetup, InboundMessage } from '../adapter.js';
 import { ActivityBoard, currentToolOf, isMidTurn } from './activity.js';
 import { answersRoute } from './answers.js';
 import { isAnswerable } from './cards.js';
@@ -13,16 +13,22 @@ import {
   CHANNEL_TYPE,
   CONSOLE_DEFAULTS,
   OWNER_USER_ID,
-  agentGroupIdFrom,
+  agentGroupIdOfChat,
+  chatIdOf,
+  chatIdOfAgentGroup,
   chatOf,
   ensureConsoleChat,
+  groupChatIdOfChat,
+  groupChatPlatformId,
   platformIdFor,
-  storeKeyOf,
+  speakerOf,
 } from './chat.js';
 import { onAgentGroupsChanged } from './create-agent.js';
+import { groupChatMembers, groupChatsRoute } from './group-chats.js';
 import {
   type ConsoleEvent,
   HttpError,
+  type OwnerMessageOptions,
   type Route,
   type RouteContext,
   readJson,
@@ -30,6 +36,7 @@ import {
   sendJson,
 } from './http.js';
 import { inboxRoute } from './inbox.js';
+import { mentionedIn } from './mentions.js';
 import { mimeTypeFor } from './mime.js';
 import { newAgentRoute } from './new-agent.js';
 import { noticeFor } from './notify.js';
@@ -50,7 +57,15 @@ export interface ConsoleAdapter extends ChannelAdapter {
   url(): string;
 }
 
-const ROUTES: Route[] = [answersRoute, inboxRoute, readRoute, panelRoute, newAgentRoute, settingsRoute];
+const ROUTES: Route[] = [
+  answersRoute,
+  inboxRoute,
+  readRoute,
+  panelRoute,
+  newAgentRoute,
+  settingsRoute,
+  groupChatsRoute,
+];
 
 export function consoleAdapterFromEnv(env: Record<string, string | undefined>): ConsoleAdapter | null {
   if (!env.CONSOLE_PORT) return null;
@@ -68,8 +83,8 @@ export function createConsoleAdapter(opts: ConsoleOptions): ConsoleAdapter {
   let setupConfig: ChannelSetup | null = null;
   let stopWatchingAgentGroups: (() => void) | null = null;
   const subscribers = new Set<http.ServerResponse>();
-  const activity = new ActivityBoard((agentGroupId, next) =>
-    broadcast({ type: 'activity', agentGroupId, activity: next }),
+  const activity = new ActivityBoard((chatId, agentGroupId, next) =>
+    broadcast({ type: 'activity', chatId, agentGroupId, activity: next }),
   );
 
   function broadcast(event: ConsoleEvent): void {
@@ -84,32 +99,62 @@ export function createConsoleAdapter(opts: ConsoleOptions): ConsoleAdapter {
     req.on('close', () => subscribers.delete(res));
   }
 
-  async function sendFromOwner(agentGroupId: string, body: Record<string, unknown>): Promise<ChatMessage> {
+  async function sendFromOwner(
+    chatId: string,
+    body: Record<string, unknown>,
+    options: OwnerMessageOptions = {},
+  ): Promise<ChatMessage> {
     const text = typeof body.text === 'string' ? body.text : '';
     const files = parseUploads(body.files);
     if (!text && files.length === 0) throw new HttpError(400, 'text or files is required');
-    await ensureConsoleChat(agentGroupId);
-    const message = store!.addMessage({ agentGroupId, role: 'owner', text, files });
+    const agentGroupId = agentGroupIdOfChat(chatId);
+    const groupChatId = groupChatIdOfChat(chatId);
+    if (agentGroupId === null && groupChatId === null) throw new HttpError(400, 'the Owner cannot write here');
+    if (agentGroupId !== null) await ensureConsoleChat(agentGroupId);
+    const message = store!.addMessage({ chatId, agentGroupId: null, role: 'owner', text, files });
     broadcast({ type: 'message', message });
-    await setupConfig!.onInbound(platformIdFor(agentGroupId), null, {
-      id: message.id,
-      kind: 'chat',
-      timestamp: message.createdAt,
-      content: {
-        text,
-        sender: 'Owner',
-        senderId: OWNER_USER_ID,
-        ...(files.length > 0 && {
-          attachments: files.map((f) => ({
-            type: f.mimeType.startsWith('image/') ? 'image' : 'file',
-            name: f.name,
-            mimeType: f.mimeType,
-            data: f.data.toString('base64'),
-          })),
-        }),
-      },
-    });
+    const inbound = inboundOf(message, files, OWNER);
+
+    if (agentGroupId !== null) {
+      await setupConfig!.onInbound(platformIdFor(agentGroupId), null, inbound);
+      return message;
+    }
+    const members = await groupChatMembers(store!, groupChatId!);
+    const mentioned = mentionedIn(text, members);
+    for (const id of options.addressedTo ?? []) mentioned.add(id);
+    for (const member of members) {
+      await setupConfig!.onInbound(groupChatPlatformId(groupChatId!, member.id), null, {
+        ...inbound,
+        isMention: mentioned.has(member.id),
+        isGroup: true,
+      });
+    }
     return message;
+  }
+
+  /** Puts an Agent's reply in the other participants' Sessions as context; it wakes no one (ADR 0003). */
+  async function relayToOtherMembers(groupChatId: string, message: ChatMessage, files: NewFile[]): Promise<void> {
+    const speaker = message.agentGroupId!;
+    const name = (await getAgentGroup(speaker))?.name ?? speaker;
+    const relayed: InboundMessage = {
+      ...inboundOf(message, files, { name, id: `${CHANNEL_TYPE}:agent:${speaker}` }),
+      isMention: false,
+      isGroup: true,
+    };
+    for (const member of await groupChatMembers(store!, groupChatId)) {
+      if (member.id === speaker) continue;
+      try {
+        await setupConfig!.onInbound(groupChatPlatformId(groupChatId, member.id), null, relayed);
+        // eslint-disable-next-line no-catch-all/no-catch-all -- the reply is already stored, so a failed relay must not fail the delivery and get it sent twice
+      } catch (err) {
+        log.warn('Console could not pass a Group Chat reply to another participant', {
+          groupChatId,
+          from: speaker,
+          to: member.id,
+          err,
+        });
+      }
+    }
   }
 
   async function handle(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
@@ -131,10 +176,11 @@ export function createConsoleAdapter(opts: ConsoleOptions): ConsoleAdapter {
         200,
         groups.map((g) => ({
           id: g.id,
+          chatId: chatIdOfAgentGroup(g.id),
           name: g.name,
-          lastMessage: store!.lastMessage(g.id),
-          activity: activity.get(g.id),
-          unread: store!.unreadCount(g.id),
+          lastMessage: store!.lastMessage(chatIdOfAgentGroup(g.id)),
+          activity: activity.get(chatIdOfAgentGroup(g.id), g.id),
+          unread: store!.unreadCount(chatIdOfAgentGroup(g.id)),
         })),
       );
     }
@@ -158,15 +204,16 @@ export function createConsoleAdapter(opts: ConsoleOptions): ConsoleAdapter {
     if (chat) {
       const [, method, rawId, action] = chat;
       const agentGroupId = await requireAgentGroup(decodeURIComponent(rawId));
+      const chatId = chatIdOfAgentGroup(agentGroupId);
       if (method === 'POST' && action === 'open') {
         await ensureConsoleChat(agentGroupId);
-        return sendJson(res, 200, { messages: store!.listMessages(agentGroupId) });
+        return sendJson(res, 200, { messages: store!.listMessages(chatId) });
       }
       if (method === 'GET' && action === 'messages') {
-        return sendJson(res, 200, store!.listMessages(agentGroupId));
+        return sendJson(res, 200, store!.listMessages(chatId));
       }
       if (method === 'POST' && action === 'messages') {
-        return sendJson(res, 200, await sendFromOwner(agentGroupId, await readJson(req)));
+        return sendJson(res, 200, await sendFromOwner(chatId, await readJson(req)));
       }
     }
 
@@ -176,6 +223,7 @@ export function createConsoleAdapter(opts: ConsoleOptions): ConsoleAdapter {
       broadcast,
       sendFromOwner,
       onAction: (...args) => setupConfig!.onAction(...args),
+      activityOf: (chatId, agentGroupId) => activity.get(chatId, agentGroupId),
     };
     for (const answerRoute of ROUTES) {
       const response = await answerRoute(route, ctx);
@@ -227,9 +275,9 @@ export function createConsoleAdapter(opts: ConsoleOptions): ConsoleAdapter {
     isConnected: () => server !== null,
 
     async setTyping(platformId): Promise<void> {
-      const agentGroupId = agentGroupIdFrom(platformId);
-      if (!agentGroupId || !store) return;
-      activity.touch(agentGroupId, await currentToolOf(agentGroupId, platformId));
+      const chat = chatOf(platformId);
+      if (!chat || chat.kind === 'inbox' || !store) return;
+      activity.touch(chatIdOf(chat), chat.agentGroupId, await currentToolOf(chat.agentGroupId, platformId));
     },
 
     async deliver(platformId, _threadId, message): Promise<string | undefined> {
@@ -242,18 +290,19 @@ export function createConsoleAdapter(opts: ConsoleOptions): ConsoleAdapter {
         });
         return undefined;
       }
-      const agentGroupId = storeKeyOf(chat);
+      const chatId = chatIdOf(chat);
+      const speaker = speakerOf(chat);
       const notice = noticeFor(chat, message);
       if (notice) broadcast({ type: 'notify', ...notice });
       const content = (message.content ?? {}) as Record<string, unknown>;
 
       if (content.operation === 'edit' && typeof content.messageId === 'string') {
-        const id = storeIdOf(content.messageId, agentGroupId);
+        const id = storeIdOf(content.messageId, speaker);
         const resolution = terminalResolutionOf(content);
         const edited =
           resolution === null
-            ? store.editMessage(agentGroupId, id, textOf(content))
-            : store.updateCard(agentGroupId, id, (c) => (isAnswerable(c) ? { ...c, resolution } : null));
+            ? store.editMessage(chatId, id, textOf(content))
+            : store.updateCard(chatId, id, (c) => (isAnswerable(c) ? { ...c, resolution } : null));
         if (edited) broadcast({ type: 'message', message: edited });
         return undefined;
       }
@@ -262,7 +311,7 @@ export function createConsoleAdapter(opts: ConsoleOptions): ConsoleAdapter {
         typeof content.messageId === 'string' &&
         typeof content.emoji === 'string'
       ) {
-        const reacted = store.addReaction(agentGroupId, storeIdOf(content.messageId, agentGroupId), content.emoji);
+        const reacted = store.addReaction(chatId, storeIdOf(content.messageId, speaker), content.emoji);
         if (reacted) broadcast({ type: 'message', message: reacted });
         return undefined;
       }
@@ -274,19 +323,24 @@ export function createConsoleAdapter(opts: ConsoleOptions): ConsoleAdapter {
       }));
       const carded = await cardOf(content);
       const stored = store.addMessage({
-        agentGroupId,
+        chatId,
+        agentGroupId: speaker,
         role: 'agent',
         text: carded?.text ?? textOf(content),
         files,
         card: carded?.card,
       });
       broadcast({ type: 'message', message: stored });
-      if (agentGroupId !== null) {
-        broadcastUnread({ store, broadcast }, agentGroupId);
+      if (chat.kind !== 'inbox') {
+        broadcastUnread({ store, broadcast }, chatId);
         // The message is already stored, so a failed read must not fail the delivery and get it sent twice.
-        if (await isMidTurn(agentGroupId, platformId).catch(() => false)) activity.holdThroughDelivery(agentGroupId);
-        else activity.clear(agentGroupId);
+        if (await isMidTurn(chat.agentGroupId, platformId).catch(() => false)) {
+          activity.holdThroughDelivery(chatId, chat.agentGroupId);
+        } else {
+          activity.clear(chatId, chat.agentGroupId);
+        }
       }
+      if (chat.kind === 'group-chat') await relayToOtherMembers(chat.groupChatId, stored, files);
       return stored.id;
     },
 
@@ -304,6 +358,29 @@ function isLocalHost(host: string | undefined): boolean {
   if (!host) return false;
   const hostname = host.replace(/:\d+$/, '');
   return hostname === CONSOLE_HOSTNAME || hostname === '127.0.0.1' || hostname === 'localhost' || hostname === '[::1]';
+}
+
+const OWNER = { name: 'Owner', id: OWNER_USER_ID };
+
+function inboundOf(message: ChatMessage, files: NewFile[], sender: { name: string; id: string }): InboundMessage {
+  return {
+    id: message.id,
+    kind: 'chat',
+    timestamp: message.createdAt,
+    content: {
+      text: message.text,
+      sender: sender.name,
+      senderId: sender.id,
+      ...(files.length > 0 && {
+        attachments: files.map((f) => ({
+          type: f.mimeType.startsWith('image/') ? 'image' : 'file',
+          name: f.name,
+          mimeType: f.mimeType,
+          data: f.data.toString('base64'),
+        })),
+      }),
+    },
+  };
 }
 
 function parseUploads(raw: unknown): NewFile[] {

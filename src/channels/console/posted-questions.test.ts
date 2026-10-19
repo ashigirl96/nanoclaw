@@ -232,6 +232,6 @@ describe('the notification for a posted Question', () => {
         kind: 'chat-sdk',
         content: { type: 'post_question', questionId: 'msg-1', ...form },
       }),
-    ).toEqual({ kind: 'question', agentGroupId: 'ag-a', body: 'What do you want?' });
+    ).toEqual({ kind: 'question', chatId: 'ag:ag-a', agentGroupId: 'ag-a', body: 'What do you want?' });
   });
 });

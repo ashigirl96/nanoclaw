@@ -17,7 +17,8 @@ export interface LibraryFile extends StoredFile {
 
 export interface ChatMessage {
   id: string;
-  /** null for the Inbox. */
+  chatId: string;
+  /** The Agent Group that sent it; null for the Owner and for the Inbox. */
   agentGroupId: string | null;
   role: Role;
   text: string;
@@ -34,8 +35,15 @@ export interface NewFile {
   data: Buffer;
 }
 
+export interface GroupChat {
+  id: string;
+  name: string;
+  createdAt: string;
+}
+
 interface MessageRow {
   id: string;
+  chat_id: string;
   agent_group_id: string;
   role: Role;
   text: string;
@@ -78,14 +86,35 @@ const MIGRATIONS = [
      last_read_seq INTEGER NOT NULL
    );`,
   `ALTER TABLE messages ADD COLUMN card TEXT;`,
+  `ALTER TABLE messages ADD COLUMN chat_id TEXT NOT NULL DEFAULT '';
+   UPDATE messages SET chat_id = CASE agent_group_id WHEN '' THEN 'inbox' ELSE 'ag:' || agent_group_id END;
+   UPDATE messages SET agent_group_id = '' WHERE role = 'owner';
+   DROP INDEX messages_by_agent_group;
+   CREATE INDEX messages_by_chat ON messages (chat_id, seq);
+   CREATE INDEX messages_by_agent_group ON messages (agent_group_id, seq);
+   CREATE TABLE chat_read_positions (
+     chat_id TEXT PRIMARY KEY,
+     last_read_seq INTEGER NOT NULL
+   );
+   INSERT INTO chat_read_positions (chat_id, last_read_seq)
+     SELECT 'ag:' || agent_group_id, last_read_seq FROM read_positions;
+   DROP TABLE read_positions;
+   ALTER TABLE chat_read_positions RENAME TO read_positions;
+   CREATE TABLE group_chats (
+     id TEXT PRIMARY KEY,
+     name TEXT NOT NULL,
+     created_at TEXT NOT NULL
+   );
+   CREATE TABLE group_chat_members (
+     group_chat_id TEXT NOT NULL REFERENCES group_chats (id) ON DELETE CASCADE,
+     agent_group_id TEXT NOT NULL,
+     joined_at TEXT NOT NULL,
+     PRIMARY KEY (group_chat_id, agent_group_id)
+   );`,
 ];
 
 // agent_group_id is NOT NULL, and no Agent Group can have an empty id.
-const INBOX_KEY = '';
-
-function chatKey(agentGroupId: string | null): string {
-  return agentGroupId ?? INBOX_KEY;
-}
+const NO_AGENT_GROUP = '';
 
 function newId(prefix: string): string {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
@@ -109,6 +138,7 @@ export class ConsoleStore {
   }
 
   addMessage(input: {
+    chatId: string;
     agentGroupId: string | null;
     role: Role;
     text: string;
@@ -119,10 +149,13 @@ export class ConsoleStore {
     const now = new Date().toISOString();
     this.db.transaction(() => {
       this.db
-        .prepare('INSERT INTO messages (id, agent_group_id, role, text, card, created_at) VALUES (?, ?, ?, ?, ?, ?)')
+        .prepare(
+          'INSERT INTO messages (id, chat_id, agent_group_id, role, text, card, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        )
         .run(
           id,
-          chatKey(input.agentGroupId),
+          input.chatId,
+          input.agentGroupId ?? NO_AGENT_GROUP,
           input.role,
           input.text,
           input.card ? JSON.stringify(input.card) : null,
@@ -141,40 +174,38 @@ export class ConsoleStore {
     return row ? this.hydrate([row])[0] : null;
   }
 
-  listMessages(agentGroupId: string | null): ChatMessage[] {
-    const rows = this.db
-      .prepare('SELECT * FROM messages WHERE agent_group_id = ? ORDER BY seq')
-      .all(chatKey(agentGroupId)) as MessageRow[];
+  listMessages(chatId: string): ChatMessage[] {
+    const rows = this.db.prepare('SELECT * FROM messages WHERE chat_id = ? ORDER BY seq').all(chatId) as MessageRow[];
     return this.hydrate(rows);
   }
 
-  lastMessage(agentGroupId: string): ChatMessage | null {
-    const row = this.db
-      .prepare('SELECT * FROM messages WHERE agent_group_id = ? ORDER BY seq DESC LIMIT 1')
-      .get(agentGroupId) as MessageRow | undefined;
+  lastMessage(chatId: string): ChatMessage | null {
+    const row = this.db.prepare('SELECT * FROM messages WHERE chat_id = ? ORDER BY seq DESC LIMIT 1').get(chatId) as
+      | MessageRow
+      | undefined;
     return row ? this.hydrate([row])[0] : null;
   }
 
-  editMessage(agentGroupId: string | null, id: string, text: string): ChatMessage | null {
+  editMessage(chatId: string, id: string, text: string): ChatMessage | null {
     const result = this.db
-      .prepare('UPDATE messages SET text = ?, edited_at = ? WHERE id = ? AND agent_group_id = ?')
-      .run(text, new Date().toISOString(), id, chatKey(agentGroupId));
+      .prepare('UPDATE messages SET text = ?, edited_at = ? WHERE id = ? AND chat_id = ?')
+      .run(text, new Date().toISOString(), id, chatId);
     return result.changes > 0 ? this.getMessage(id) : null;
   }
 
   /** A null from `update` leaves the message as it is. */
-  updateCard(agentGroupId: string | null, id: string, update: (card: Card) => Card | null): ChatMessage | null {
+  updateCard(chatId: string, id: string, update: (card: Card) => Card | null): ChatMessage | null {
     const message = this.getMessage(id);
-    if (!message?.card || message.agentGroupId !== agentGroupId) return null;
+    if (!message?.card || message.chatId !== chatId) return null;
     const next = update(message.card);
     if (!next) return null;
     this.db.prepare('UPDATE messages SET card = ? WHERE id = ?').run(JSON.stringify(next), id);
     return this.getMessage(id);
   }
 
-  addReaction(agentGroupId: string | null, id: string, emoji: string): ChatMessage | null {
+  addReaction(chatId: string, id: string, emoji: string): ChatMessage | null {
     const message = this.getMessage(id);
-    if (!message || message.agentGroupId !== agentGroupId) return null;
+    if (!message || message.chatId !== chatId) return null;
     if (message.reactions.includes(emoji)) return message;
     this.db
       .prepare('UPDATE messages SET reactions = ? WHERE id = ?')
@@ -183,29 +214,72 @@ export class ConsoleStore {
   }
 
   /** false when the message is not in this Chat. */
-  markRead(agentGroupId: string, messageId: string): boolean {
-    const row = this.db
-      .prepare('SELECT seq FROM messages WHERE id = ? AND agent_group_id = ?')
-      .get(messageId, agentGroupId) as { seq: number } | undefined;
+  markRead(chatId: string, messageId: string): boolean {
+    const row = this.db.prepare('SELECT seq FROM messages WHERE id = ? AND chat_id = ?').get(messageId, chatId) as
+      | { seq: number }
+      | undefined;
     if (!row) return false;
     this.db
       .prepare(
-        `INSERT INTO read_positions (agent_group_id, last_read_seq) VALUES (?, ?)
-         ON CONFLICT (agent_group_id) DO UPDATE SET last_read_seq = MAX(last_read_seq, excluded.last_read_seq)`,
+        `INSERT INTO read_positions (chat_id, last_read_seq) VALUES (?, ?)
+         ON CONFLICT (chat_id) DO UPDATE SET last_read_seq = MAX(last_read_seq, excluded.last_read_seq)`,
       )
-      .run(agentGroupId, row.seq);
+      .run(chatId, row.seq);
     return true;
   }
 
-  unreadCount(agentGroupId: string): number {
+  unreadCount(chatId: string): number {
     const row = this.db
       .prepare(
         `SELECT COUNT(*) AS n FROM messages
-          WHERE agent_group_id = ? AND role = 'agent'
-            AND seq > COALESCE((SELECT last_read_seq FROM read_positions WHERE agent_group_id = ?), 0)`,
+          WHERE chat_id = ? AND role = 'agent'
+            AND seq > COALESCE((SELECT last_read_seq FROM read_positions WHERE chat_id = ?), 0)`,
       )
-      .get(agentGroupId, agentGroupId) as { n: number };
+      .get(chatId, chatId) as { n: number };
     return row.n;
+  }
+
+  createGroupChat(id: string, name: string, agentGroupIds: string[]): GroupChat {
+    const now = new Date().toISOString();
+    this.db.transaction(() => {
+      this.db.prepare('INSERT INTO group_chats (id, name, created_at) VALUES (?, ?, ?)').run(id, name, now);
+      for (const agentGroupId of agentGroupIds) this.addGroupChatMember(id, agentGroupId);
+    })();
+    return { id, name, createdAt: now };
+  }
+
+  listGroupChats(): GroupChat[] {
+    const rows = this.db.prepare('SELECT * FROM group_chats ORDER BY created_at, id').all() as GroupChatRow[];
+    return rows.map(groupChatOf);
+  }
+
+  getGroupChat(id: string): GroupChat | null {
+    const row = this.db.prepare('SELECT * FROM group_chats WHERE id = ?').get(id) as GroupChatRow | undefined;
+    return row ? groupChatOf(row) : null;
+  }
+
+  /** The messages stay, so a Group Chat made again never collides with them: its id is new. */
+  deleteGroupChat(id: string): void {
+    this.db.prepare('DELETE FROM group_chats WHERE id = ?').run(id);
+  }
+
+  groupChatMembers(id: string): string[] {
+    const rows = this.db
+      .prepare('SELECT agent_group_id FROM group_chat_members WHERE group_chat_id = ? ORDER BY joined_at, rowid')
+      .all(id) as Array<{ agent_group_id: string }>;
+    return rows.map((r) => r.agent_group_id);
+  }
+
+  addGroupChatMember(id: string, agentGroupId: string): void {
+    this.db
+      .prepare('INSERT OR IGNORE INTO group_chat_members (group_chat_id, agent_group_id, joined_at) VALUES (?, ?, ?)')
+      .run(id, agentGroupId, new Date().toISOString());
+  }
+
+  removeGroupChatMember(id: string, agentGroupId: string): void {
+    this.db
+      .prepare('DELETE FROM group_chat_members WHERE group_chat_id = ? AND agent_group_id = ?')
+      .run(id, agentGroupId);
   }
 
   getFile(id: string): (StoredFile & { data: Buffer }) | null {
@@ -243,7 +317,8 @@ export class ConsoleStore {
     );
     return rows.map((row) => ({
       id: row.id,
-      agentGroupId: row.agent_group_id === INBOX_KEY ? null : row.agent_group_id,
+      chatId: row.chat_id,
+      agentGroupId: row.agent_group_id === NO_AGENT_GROUP ? null : row.agent_group_id,
       role: row.role,
       text: row.text,
       card: row.card ? (JSON.parse(row.card) as Card) : null,
@@ -253,4 +328,14 @@ export class ConsoleStore {
       editedAt: row.edited_at,
     }));
   }
+}
+
+interface GroupChatRow {
+  id: string;
+  name: string;
+  created_at: string;
+}
+
+function groupChatOf(row: GroupChatRow): GroupChat {
+  return { id: row.id, name: row.name, createdAt: row.created_at };
 }

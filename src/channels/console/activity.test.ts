@@ -70,7 +70,7 @@ describe('working indicator', () => {
     await h.adapter.setTyping!('web:ag-a', null);
 
     expect(await events.ofType('activity', 1)).toEqual([
-      { type: 'activity', agentGroupId: 'ag-a', activity: { working: true, tool: null } },
+      { type: 'activity', chatId: 'ag:ag-a', agentGroupId: 'ag-a', activity: { working: true, tool: null } },
     ]);
     const groups = await h.api<Summary[]>('/api/agent-groups');
     expect(groups.map((g) => [g.id, g.activity])).toEqual([
@@ -87,7 +87,7 @@ describe('working indicator', () => {
     await h.adapter.setTyping!('web:ag-a', null);
 
     expect(await events.ofType('activity', 1)).toEqual([
-      { type: 'activity', agentGroupId: 'ag-a', activity: { working: true, tool: 'WebSearch' } },
+      { type: 'activity', chatId: 'ag:ag-a', agentGroupId: 'ag-a', activity: { working: true, tool: 'WebSearch' } },
     ]);
     events.close();
   });
@@ -115,6 +115,7 @@ describe('working indicator', () => {
     const activities = await events.ofType('activity', 2);
     expect(activities[1]).toEqual({
       type: 'activity',
+      chatId: 'ag:ag-a',
       agentGroupId: 'ag-a',
       activity: { working: false, tool: null },
     });
@@ -130,45 +131,45 @@ describe('ActivityBoard', () => {
   it('goes idle once setTyping stops arriving', () => {
     vi.useFakeTimers();
     const changes: unknown[] = [];
-    const board = new ActivityBoard((id, activity) => changes.push([id, activity]));
+    const board = new ActivityBoard((chatId, id, activity) => changes.push([chatId, id, activity]));
 
-    board.touch('ag-a', null);
+    board.touch('ag:ag-a', 'ag-a', null);
     vi.advanceTimersByTime(4000);
-    board.touch('ag-a', 'Bash');
+    board.touch('ag:ag-a', 'ag-a', 'Bash');
     vi.advanceTimersByTime(8000);
-    expect(board.get('ag-a')).toEqual({ working: true, tool: 'Bash' });
+    expect(board.get('ag:ag-a', 'ag-a')).toEqual({ working: true, tool: 'Bash' });
     vi.advanceTimersByTime(2000);
 
-    expect(board.get('ag-a')).toEqual({ working: false, tool: null });
+    expect(board.get('ag:ag-a', 'ag-a')).toEqual({ working: false, tool: null });
     expect(changes).toEqual([
-      ['ag-a', { working: true, tool: null }],
-      ['ag-a', { working: true, tool: 'Bash' }],
-      ['ag-a', { working: false, tool: null }],
+      ['ag:ag-a', 'ag-a', { working: true, tool: null }],
+      ['ag:ag-a', 'ag-a', { working: true, tool: 'Bash' }],
+      ['ag:ag-a', 'ag-a', { working: false, tool: null }],
     ]);
   });
 
   it('stays working while the Host holds back setTyping after a delivery', () => {
     vi.useFakeTimers();
     const board = new ActivityBoard(() => {});
-    board.touch('ag-a', 'Bash');
+    board.touch('ag:ag-a', 'ag-a', 'Bash');
 
-    board.holdThroughDelivery('ag-a');
+    board.holdThroughDelivery('ag:ag-a', 'ag-a');
     vi.advanceTimersByTime(14_000);
-    expect(board.get('ag-a')).toEqual({ working: true, tool: 'Bash' });
-    board.touch('ag-a', 'Bash');
+    expect(board.get('ag:ag-a', 'ag-a')).toEqual({ working: true, tool: 'Bash' });
+    board.touch('ag:ag-a', 'ag-a', 'Bash');
     vi.advanceTimersByTime(8000);
-    expect(board.get('ag-a')).toEqual({ working: true, tool: 'Bash' });
+    expect(board.get('ag:ag-a', 'ag-a')).toEqual({ working: true, tool: 'Bash' });
     vi.advanceTimersByTime(2000);
 
-    expect(board.get('ag-a')).toEqual({ working: false, tool: null });
+    expect(board.get('ag:ag-a', 'ag-a')).toEqual({ working: false, tool: null });
   });
 
   it('does not start a mark when it holds an idle Agent Group', () => {
     vi.useFakeTimers();
     const board = new ActivityBoard(() => {});
 
-    board.holdThroughDelivery('ag-a');
+    board.holdThroughDelivery('ag:ag-a', 'ag-a');
 
-    expect(board.get('ag-a')).toEqual({ working: false, tool: null });
+    expect(board.get('ag:ag-a', 'ag-a')).toEqual({ working: false, tool: null });
   });
 });

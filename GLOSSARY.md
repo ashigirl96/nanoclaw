@@ -66,12 +66,16 @@ _Avoid_: channel registration
 _Avoid_: channel, channel type, service
 
 **Console**:
-Host が自ら配信する、Owner だけが使う Platform。Agent Group を一覧に並べ、Agent Group ごとに 1 つの Chat を持つ。
+Host が自ら配信する、Owner だけが使う Platform。Agent Group を一覧に並べ、Agent Group ごとに 1 つの Chat を持ち、Owner が Group Chat を作れる。
 _Avoid_: web UI, local-web, dashboard
 
 **Inbox**:
 Console の中で Owner の DM にあたる Chat。どの Agent Group の Chat にも属さない Approval Request や知らせが届く。
 _Avoid_: notifications, DM
+
+**Group Chat**:
+Console の中で Owner が作り、複数の Agent Group が加わる Chat。Agent は Mention されたときだけ答える。
+_Avoid_: room, multi-agent chat
 
 **Library**:
 Console で Agent Group ごとに見られる、その Agent が Console に届けたファイルの一覧。
