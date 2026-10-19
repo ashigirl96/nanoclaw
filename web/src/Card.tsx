@@ -1,6 +1,7 @@
 import { useState } from 'react';
 
 import { type Card, type ChatMessage, type ChoiceCard, type LinkCard, api } from './api';
+import { FormCardView } from './FormCard';
 
 interface Props {
   message: ChatMessage & { card: Card };
@@ -11,6 +12,9 @@ interface Props {
 export function CardView({ message, onAnswered, onError }: Props) {
   const { card } = message;
   if (card.type === 'links') return <LinkCardView card={card} />;
+  if (card.type === 'form') {
+    return <FormCardView messageId={message.id} card={card} onAnswered={onAnswered} onError={onError} />;
+  }
   return <ChoiceCardView messageId={message.id} card={card} onAnswered={onAnswered} onError={onError} />;
 }
 

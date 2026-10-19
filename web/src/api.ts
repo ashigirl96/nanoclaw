@@ -29,7 +29,26 @@ export interface LinkCard {
   links: Array<{ label: string; url: string; style?: 'primary' | 'danger' | 'default' }>;
 }
 
-export type Card = ChoiceCard | LinkCard;
+export interface FormField {
+  id: string;
+  label: string;
+  type: 'text' | 'textarea' | 'select' | 'multi_select' | 'date';
+  options?: string[];
+}
+
+/** A Question that asks for form inputs; its resolution lists the answered values. */
+export interface FormCard {
+  type: 'form';
+  questionId: string;
+  title: string;
+  question: string;
+  fields: FormField[];
+  resolution: string | null;
+}
+
+export type FormValues = Record<string, string | string[]>;
+
+export type Card = ChoiceCard | LinkCard | FormCard;
 
 export interface ChatMessage {
   id: string;
@@ -103,6 +122,11 @@ export const api = {
     request<ChatMessage>(`/api/messages/${encodeURIComponent(messageId)}/answer`, {
       method: 'POST',
       body: JSON.stringify({ value }),
+    }),
+  answerForm: (messageId: string, values: FormValues) =>
+    request<ChatMessage>(`/api/messages/${encodeURIComponent(messageId)}/answer`, {
+      method: 'POST',
+      body: JSON.stringify({ values }),
     }),
 };
 
