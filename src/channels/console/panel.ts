@@ -13,9 +13,7 @@ export interface PanelContext {
   readBody: () => Promise<Record<string, unknown>>;
 }
 
-const STATUS_OF_OUTCOME = { created: 201, held: 202, denied: 403 } as const;
-
-/** The right-hand panel's API (Library, Routine) and the "+" flow. Returns null for other routes. */
+/** The right-hand panel's API (details, Library, Routine) and the "+" flow. Returns null for other routes. */
 export async function panelRoute(route: string, ctx: PanelContext): Promise<PanelResponse | null> {
   const perGroup = /^GET \/api\/agent-groups\/([^/]+)(?:\/(library|routines))?$/.exec(route);
   if (perGroup) {
@@ -37,7 +35,8 @@ export async function panelRoute(route: string, ctx: PanelContext): Promise<Pane
   if (route === 'POST /api/agent-groups') {
     try {
       const outcome = await createAgentFromConsole(await ctx.readBody());
-      return { status: STATUS_OF_OUTCOME[outcome.status], body: outcome };
+      if (outcome.status === 'denied') return error(403, outcome.reason);
+      return { status: outcome.status === 'created' ? 201 : 202, body: outcome };
     } catch (err) {
       if (err instanceof CreateAgentRequestError) return error(400, err.message);
       throw err;
