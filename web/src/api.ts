@@ -44,10 +44,23 @@ export interface ChatMessage {
   editedAt: string | null;
 }
 
+export interface Activity {
+  working: boolean;
+  tool: string | null;
+}
+
 export interface AgentGroupSummary {
   id: string;
   name: string;
   lastMessage: ChatMessage | null;
+  activity: Activity;
+  unread: number;
+}
+
+export interface Notice {
+  kind: 'reply' | 'question' | 'approval';
+  agentGroupId: string | null;
+  body: string;
 }
 
 export interface Upload {
@@ -56,7 +69,11 @@ export interface Upload {
   data: string;
 }
 
-export type ConsoleEvent = { type: 'message'; message: ChatMessage };
+export type ConsoleEvent =
+  | { type: 'message'; message: ChatMessage }
+  | { type: 'activity'; agentGroupId: string; activity: Activity }
+  | { type: 'unread'; agentGroupId: string; unread: number }
+  | ({ type: 'notify' } & Notice);
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, { ...init, headers: { 'content-type': 'application/json', ...init?.headers } });
@@ -75,6 +92,11 @@ export const api = {
     request<ChatMessage>(`/api/agent-groups/${encodeURIComponent(agentGroupId)}/messages`, {
       method: 'POST',
       body: JSON.stringify({ text, files }),
+    }),
+  markRead: (agentGroupId: string, messageId: string) =>
+    request<{ unread: number }>(`/api/agent-groups/${encodeURIComponent(agentGroupId)}/read`, {
+      method: 'POST',
+      body: JSON.stringify({ messageId }),
     }),
   inbox: () => request<ChatMessage[]>('/api/inbox'),
   answer: (messageId: string, value: string) =>

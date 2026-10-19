@@ -79,8 +79,57 @@ body {
   background: var(--border);
 }
 
+.group-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .group-name {
   font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.group.unread .group-excerpt {
+  color: var(--fg);
+}
+
+.unread-badge {
+  margin-left: auto;
+  min-width: 20px;
+  padding: 0 6px;
+  border-radius: 10px;
+  background: var(--accent);
+  color: var(--bg);
+  font-size: 0.75em;
+  font-weight: 700;
+  line-height: 20px;
+  text-align: center;
+}
+
+.working-dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: working-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes working-pulse {
+  50% {
+    opacity: 0.25;
+  }
+}
+
+.working {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--fg-muted);
+  font-size: 0.9em;
 }
 
 .group-excerpt {
@@ -258,16 +307,6 @@ body {
   background: transparent;
   color: inherit;
   cursor: pointer;
-}
-
-.badge {
-  margin-left: 6px;
-  padding: 0 7px;
-  border-radius: 999px;
-  background: var(--accent);
-  color: #fff;
-  font-size: 0.75em;
-  vertical-align: middle;
 }
 
 .card {

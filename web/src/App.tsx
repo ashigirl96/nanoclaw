@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
-import { type AgentGroupSummary, type ChatMessage, api, subscribe } from './api';
+import { type AgentGroupSummary, type ChatMessage, type ConsoleEvent, api, subscribe } from './api';
 import { Chat } from './Chat';
 import { Inbox } from './Inbox';
+import { announce, isForeground, useForeground, useNotificationPermission } from './notifications';
 import { Sidebar } from './Sidebar';
 
 type View = { kind: 'inbox' } | { kind: 'chat'; agentGroupId: string } | null;
@@ -38,29 +39,51 @@ export function App() {
     );
   }, [selected]);
 
-  useEffect(
-    () =>
-      subscribe((event) => {
-        const { message } = event;
-        if (message.agentGroupId === null) {
-          setInbox((prev) => upsert(prev, message));
-          return;
-        }
-        setGroups((prev) => prev.map((g) => (g.id === message.agentGroupId ? withLastMessage(g, message) : g)));
-        if (message.agentGroupId !== selected) return;
-        setMessages((prev) => upsert(prev, message));
-      }),
-    [selected],
-  );
-
   const navigate = useCallback((next: Exclude<View, null>) => {
     const path = next.kind === 'inbox' ? '/inbox' : `/chat/${encodeURIComponent(next.agentGroupId)}`;
     window.history.pushState(null, '', path);
     setView(next);
   }, []);
 
+  const groupsRef = useRef(groups);
+  groupsRef.current = groups;
+
+  useEffect(
+    () =>
+      subscribe((event: ConsoleEvent) => {
+        if (event.type === 'message') {
+          const { message } = event;
+          if (message.agentGroupId === null) {
+            setInbox((prev) => upsert(prev, message));
+            return;
+          }
+          setGroups((prev) => prev.map((g) => (g.id === message.agentGroupId ? withLastMessage(g, message) : g)));
+          if (message.agentGroupId === selected) setMessages((prev) => upsert(prev, message));
+        } else if (event.type === 'activity') {
+          setGroups((prev) => prev.map((g) => (g.id === event.agentGroupId ? { ...g, activity: event.activity } : g)));
+        } else if (event.type === 'unread') {
+          setGroups((prev) => prev.map((g) => (g.id === event.agentGroupId ? { ...g, unread: event.unread } : g)));
+        } else if (event.type === 'notify') {
+          const target = event.agentGroupId;
+          const name = target ? (groupsRef.current.find((g) => g.id === target)?.name ?? target) : 'Inbox';
+          announce(event, name, () => navigate(target ? { kind: 'chat', agentGroupId: target } : { kind: 'inbox' }));
+        }
+      }),
+    [selected, navigate],
+  );
+
+  useNotificationPermission();
+
   const current = groups.find((g) => g.id === selected) ?? null;
   const waiting = inbox.filter((m) => m.card && m.card.type !== 'links' && m.card.resolution === null).length;
+  const lastMessageId = messages.at(-1)?.id;
+  const unreadHere = current?.unread ?? 0;
+  const markSeen = useCallback(() => {
+    if (!selected || !lastMessageId || unreadHere === 0 || !isForeground()) return;
+    api.markRead(selected, lastMessageId).catch((err: Error) => setError(err.message));
+  }, [selected, lastMessageId, unreadHere]);
+  useEffect(markSeen, [markSeen]);
+  useForeground(markSeen);
 
   return (
     <div className="layout">

@@ -6,21 +6,28 @@ import { DATA_DIR } from '../../config.js';
 import { getAgentGroup, getAllAgentGroups } from '../../db/agent-groups.js';
 import { log } from '../../log.js';
 import type { ChannelAdapter, ChannelSetup } from '../adapter.js';
+import { type Activity, ActivityBoard, currentToolOf } from './activity.js';
 import {
   CHANNEL_TYPE,
   CONSOLE_DEFAULTS,
   OWNER_USER_ID,
+  agentGroupIdFrom,
   chatOf,
   ensureConsoleChat,
   platformIdFor,
   platformIdOfChat,
 } from './chat.js';
 import { mimeTypeFor } from './mime.js';
+import { type Notice, noticeFor } from './notify.js';
 import { answerRoute, cardOf, lateAnswerText } from './questions.js';
 import { serveStatic } from './static.js';
 import { type ChatMessage, ConsoleStore, type NewFile } from './store.js';
 
-type ConsoleEvent = { type: 'message'; message: ChatMessage };
+type ConsoleEvent =
+  | { type: 'message'; message: ChatMessage }
+  | { type: 'activity'; agentGroupId: string; activity: Activity }
+  | { type: 'unread'; agentGroupId: string; unread: number }
+  | ({ type: 'notify' } & Notice);
 
 export interface ConsoleOptions {
   port: number;
@@ -59,10 +66,19 @@ export function createConsoleAdapter(opts: ConsoleOptions): ConsoleAdapter {
   let store: ConsoleStore | null = null;
   let setupConfig: ChannelSetup | null = null;
   const subscribers = new Set<http.ServerResponse>();
+  const activity = new ActivityBoard((agentGroupId, next) =>
+    broadcast({ type: 'activity', agentGroupId, activity: next }),
+  );
 
   function broadcast(event: ConsoleEvent): void {
     const frame = `data: ${JSON.stringify(event)}\n\n`;
     for (const res of subscribers) res.write(frame);
+  }
+
+  function broadcastUnread(agentGroupId: string): number {
+    const unread = store!.unreadCount(agentGroupId);
+    broadcast({ type: 'unread', agentGroupId, unread });
+    return unread;
   }
 
   function subscribe(req: http.IncomingMessage, res: http.ServerResponse): void {
@@ -151,7 +167,13 @@ export function createConsoleAdapter(opts: ConsoleOptions): ConsoleAdapter {
       return sendJson(
         res,
         200,
-        groups.map((g) => ({ id: g.id, name: g.name, lastMessage: store!.lastMessage(g.id) })),
+        groups.map((g) => ({
+          id: g.id,
+          name: g.name,
+          lastMessage: store!.lastMessage(g.id),
+          activity: activity.get(g.id),
+          unread: store!.unreadCount(g.id),
+        })),
       );
     }
 
@@ -175,7 +197,7 @@ export function createConsoleAdapter(opts: ConsoleOptions): ConsoleAdapter {
       return;
     }
 
-    const chat = /^(GET|POST) \/api\/agent-groups\/([^/]+)\/(open|messages)$/.exec(route);
+    const chat = /^(GET|POST) \/api\/agent-groups\/([^/]+)\/(open|messages|read)$/.exec(route);
     if (chat) {
       const [, method, rawId, action] = chat;
       const agentGroupId = await requireAgentGroup(decodeURIComponent(rawId));
@@ -188,6 +210,13 @@ export function createConsoleAdapter(opts: ConsoleOptions): ConsoleAdapter {
       }
       if (method === 'POST' && action === 'messages') {
         return sendJson(res, 200, await sendFromOwner(agentGroupId, await readJson(req)));
+      }
+      if (method === 'POST' && action === 'read') {
+        const { messageId } = await readJson(req);
+        if (typeof messageId !== 'string' || !store!.markRead(agentGroupId, messageId)) {
+          throw new HttpError(404, 'unknown message in this Chat');
+        }
+        return sendJson(res, 200, { unread: broadcastUnread(agentGroupId) });
       }
     }
 
@@ -225,15 +254,24 @@ export function createConsoleAdapter(opts: ConsoleOptions): ConsoleAdapter {
         await new Promise<void>((resolve) => server!.close(() => resolve()));
         server = null;
       }
+      activity.dispose();
       store?.close();
       store = null;
     },
 
     isConnected: () => server !== null,
 
+    async setTyping(platformId): Promise<void> {
+      const agentGroupId = agentGroupIdFrom(platformId);
+      if (!agentGroupId || !store) return;
+      activity.touch(agentGroupId, await currentToolOf(agentGroupId, platformId));
+    },
+
     async deliver(platformId, _threadId, message): Promise<string | undefined> {
       const agentGroupId = chatOf(platformId);
       if (!store) return undefined;
+      const notice = noticeFor(platformId, message);
+      if (notice) broadcast({ type: 'notify', ...notice });
       if (agentGroupId === undefined) {
         log.warn('Console dropped an Outbound Message for a platform id it has no Chat for', {
           platformId,
@@ -277,6 +315,10 @@ export function createConsoleAdapter(opts: ConsoleOptions): ConsoleAdapter {
         card: carded?.card,
       });
       broadcast({ type: 'message', message: stored });
+      if (agentGroupId !== null) {
+        broadcastUnread(agentGroupId);
+        activity.clear(agentGroupId);
+      }
       return stored.id;
     },
 

@@ -15,10 +15,18 @@ export function Sidebar({ groups, selected, inboxSelected, inboxWaiting, onSelec
       <div className="sidebar-title">Console</div>
       <ul>
         <li>
-          <button type="button" className={inboxSelected ? 'group selected' : 'group'} onClick={onSelectInbox}>
-            <span className="group-name">
-              Inbox
-              {inboxWaiting > 0 && <span className="badge">{inboxWaiting}</span>}
+          <button
+            type="button"
+            className={['group', inboxSelected && 'selected', inboxWaiting > 0 && 'unread'].filter(Boolean).join(' ')}
+            onClick={onSelectInbox}
+          >
+            <span className="group-head">
+              <span className="group-name">Inbox</span>
+              {inboxWaiting > 0 && (
+                <span className="unread-badge" aria-label={`承認待ち ${inboxWaiting} 件`}>
+                  {inboxWaiting}
+                </span>
+              )}
             </span>
             <span className="group-excerpt">
               {inboxWaiting > 0 ? `${inboxWaiting} 件の承認待ち` : '承認を待つものはありません'}
@@ -29,10 +37,18 @@ export function Sidebar({ groups, selected, inboxSelected, inboxWaiting, onSelec
           <li key={g.id}>
             <button
               type="button"
-              className={g.id === selected ? 'group selected' : 'group'}
+              className={['group', g.id === selected && 'selected', g.unread > 0 && 'unread'].filter(Boolean).join(' ')}
               onClick={() => onSelect(g.id)}
             >
-              <span className="group-name">{g.name}</span>
+              <span className="group-head">
+                <span className="group-name">{g.name}</span>
+                {g.activity.working && <span className="working-dot" title="作業中" aria-label="作業中" />}
+                {g.unread > 0 && (
+                  <span className="unread-badge" aria-label={`未読 ${g.unread} 件`}>
+                    {g.unread}
+                  </span>
+                )}
+              </span>
               <span className="group-excerpt">{excerpt(g.lastMessage)}</span>
             </button>
           </li>
