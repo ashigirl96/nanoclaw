@@ -15,7 +15,7 @@ import {
 import { closeDb, initTestDb, runMigrations } from '../../db/index.js';
 import { createAgentGroup } from '../../db/agent-groups.js';
 import { createMessagingGroup, getMessagingGroupByPlatform } from '../../db/messaging-groups.js';
-import { createSession } from '../../db/sessions.js';
+import { createPendingApproval, createSession, deletePendingApproval } from '../../db/sessions.js';
 import { setDeliveryAdapter } from '../../delivery.js';
 import { requestApproval } from '../../modules/approvals/primitive.js';
 import { upsertUser } from '../../modules/permissions/db/users.js';
@@ -249,20 +249,46 @@ describe('answering an Approval Request', () => {
     expect(actions).toHaveLength(1);
   });
 
-  it('shows the result the Host writes back on the card', async () => {
-    const id = await consoleAdapter().deliver('owner', null, {
+  async function deliverCredentialApproval(): Promise<string> {
+    const options = [
+      { label: 'Approve', selectedLabel: 'Approve', value: 'approve' },
+      { label: 'Reject', selectedLabel: 'Reject', value: 'reject' },
+    ];
+    await createPendingApproval({
+      approval_id: 'ga-1',
+      request_id: 'req-1',
+      action: 'gateway_request',
+      payload: '{}',
+      created_at: new Date().toISOString(),
+      title: 'Credential request',
+      question: 'Alice wants to call api.github.com',
+      options_json: JSON.stringify(options),
+    });
+    return (await consoleAdapter().deliver('owner', null, {
       kind: 'chat-sdk',
       content: {
         type: 'ask_question',
         questionId: 'ga-1',
         title: 'Credential request',
         question: 'Alice wants to call api.github.com',
-        options: [
-          { label: 'Approve', value: 'approve' },
-          { label: 'Reject', value: 'reject' },
-        ],
+        options,
       },
-    });
+    }))!;
+  }
+
+  it('leaves a Credential Approval open until the Host writes the result back', async () => {
+    const id = await deliverCredentialApproval();
+
+    await answer(id, 'approve');
+
+    expect(actions).toEqual([
+      { questionId: 'ga-1', value: 'approve', userId: 'web:owner', messageId: id, platformId: 'owner' },
+    ]);
+    expect((await inbox())[0].card).toMatchObject({ resolution: null });
+  });
+
+  it('shows the result the Host writes back on the card', async () => {
+    const id = await deliverCredentialApproval();
 
     await consoleAdapter().deliver('owner', null, {
       kind: 'chat-sdk',
@@ -280,5 +306,16 @@ describe('answering an Approval Request', () => {
     });
 
     expect((await inbox())[0].card).toMatchObject({ resolution: '✅ Approved' });
+  });
+
+  it('closes a card the Host no longer holds without answering it', async () => {
+    await askApproval(sessionIn('sess-web', await consoleMessagingGroupId()));
+    const [card] = await inbox();
+    await deletePendingApproval(card.card!.questionId);
+
+    await answer(card.id, 'approve');
+
+    expect(actions).toEqual([]);
+    expect((await inbox())[0].card!.resolution).not.toBeNull();
   });
 });
