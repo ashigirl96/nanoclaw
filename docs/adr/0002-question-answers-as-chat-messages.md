@@ -5,4 +5,4 @@ Console では、Agent が待つのをやめた後の Question への答えと�
 ## Consequences
 
 - 答えの Chat Message は、どの Question への答えかを本文で示す。Agent から見ると、ふつうの会話の続きになる。
-- `ask_user_question` が待っている間の答えは、従来どおり `onAction` で返す。
+- Host が `pending_questions` に残している Question への答えは、Console の adapter が `question_response` の System Message として Session に書き、`ask_user_question` が取ったか（`processing_ack` が completed になったか）を数秒見届ける。取られなければその行を failed にして、Chat Message で届け直す。`ask_user_question` の `timeout` は Host から見えず、途中で取り消されることもあるので、経過時間では待っているかを判断できないため。`onAction` を通すと、取られなかった行の id が分からず、Agent を起こし続ける trigger の行が残る。

@@ -29,6 +29,26 @@ export function agentGroupIdFrom(platformId: string): string | null {
   return platformId.startsWith(prefix) ? platformId.slice(prefix.length) : null;
 }
 
+// The Console has no openDM, so ensureUserDm makes the handle of web:owner the platform id of the Owner's DM.
+export const INBOX_PLATFORM_ID = OWNER_USER_ID.slice(CHANNEL_TYPE.length + 1);
+
+export type ConsoleChat = { kind: 'inbox' } | { kind: 'agent-group'; agentGroupId: string };
+
+export function chatOf(platformId: string): ConsoleChat | null {
+  if (platformId === INBOX_PLATFORM_ID) return { kind: 'inbox' };
+  const agentGroupId = agentGroupIdFrom(platformId);
+  return agentGroupId === null ? null : { kind: 'agent-group', agentGroupId };
+}
+
+/** The store's key for a Chat, where null stands for the Inbox. */
+export function storeKeyOf(chat: ConsoleChat): string | null {
+  return chat.kind === 'inbox' ? null : chat.agentGroupId;
+}
+
+export function platformIdOfChat(agentGroupId: string | null): string {
+  return agentGroupId === null ? INBOX_PLATFORM_ID : platformIdFor(agentGroupId);
+}
+
 export async function ensureOwner(): Promise<void> {
   const now = new Date().toISOString();
   await upsertUser({ id: OWNER_USER_ID, kind: CHANNEL_TYPE, display_name: 'Owner', created_at: now });

@@ -4,21 +4,84 @@ export interface StoredFile {
   mimeType: string;
 }
 
+export interface CardOption {
+  label: string;
+  selectedLabel: string;
+  value: string;
+  style?: 'primary' | 'danger' | 'default';
+}
+
+export interface ChoiceCard {
+  type: 'approval' | 'question';
+  questionId: string;
+  title: string;
+  question: string;
+  options: CardOption[];
+  resolution: string | null;
+}
+
+export interface LinkCard {
+  type: 'links';
+  title: string;
+  description: string;
+  children: string[];
+  links: Array<{ label: string; url: string; style?: 'primary' | 'danger' | 'default' }>;
+}
+
+export interface FormField {
+  id: string;
+  label: string;
+  type: 'text' | 'textarea' | 'select' | 'multi_select' | 'date';
+  options?: string[];
+}
+
+export interface FormCard {
+  type: 'form';
+  questionId: string;
+  title: string;
+  question: string;
+  fields: FormField[];
+  resolution: string | null;
+}
+
+export type FormValues = Record<string, string | string[]>;
+
+export type Card = ChoiceCard | LinkCard | FormCard;
+
+export function awaitsAnswer(card: Card): card is ChoiceCard | FormCard {
+  return card.type !== 'links' && card.resolution === null;
+}
+
 export interface ChatMessage {
   id: string;
-  agentGroupId: string;
+  /** null for the Inbox. */
+  agentGroupId: string | null;
   role: 'owner' | 'agent';
   text: string;
+  card: Card | null;
   reactions: string[];
   files: StoredFile[];
   createdAt: string;
   editedAt: string | null;
 }
 
+export interface Activity {
+  working: boolean;
+  tool: string | null;
+}
+
 export interface AgentGroupSummary {
   id: string;
   name: string;
   lastMessage: ChatMessage | null;
+  activity: Activity;
+  unread: number;
+}
+
+export interface Notice {
+  kind: 'reply' | 'question' | 'approval';
+  agentGroupId: string | null;
+  body: string;
 }
 
 export interface Upload {
@@ -27,7 +90,44 @@ export interface Upload {
   data: string;
 }
 
-export type ConsoleEvent = { type: 'message'; message: ChatMessage };
+export interface AgentGroupDetails {
+  id: string;
+  name: string;
+  folder: string;
+  createdAt: string;
+}
+
+export interface LibraryFile extends StoredFile {
+  messageId: string;
+  createdAt: string;
+}
+
+export interface TaskSummary {
+  taskId: string;
+  prompt: string;
+  status: 'pending' | 'paused';
+  schedule: string;
+  nextOccurrence: string | null;
+  lastOccurrence: string | null;
+  occurrences: number;
+  failedOccurrences: number;
+  lastResult: string | null;
+}
+
+export interface Template {
+  ref: string;
+  name: string;
+  description: string;
+}
+
+export type CreateAgentOutcome = { status: 'created'; agentGroup: { id: string; name: string } } | { status: 'held' };
+
+export type ConsoleEvent =
+  | { type: 'message'; message: ChatMessage }
+  | { type: 'activity'; agentGroupId: string; activity: Activity }
+  | { type: 'unread'; agentGroupId: string; unread: number }
+  | ({ type: 'notify' } & Notice)
+  | { type: 'agent-groups' };
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, { ...init, headers: { 'content-type': 'application/json', ...init?.headers } });
@@ -46,6 +146,35 @@ export const api = {
     request<ChatMessage>(`/api/agent-groups/${encodeURIComponent(agentGroupId)}/messages`, {
       method: 'POST',
       body: JSON.stringify({ text, files }),
+    }),
+  details: (agentGroupId: string) =>
+    request<AgentGroupDetails>(`/api/agent-groups/${encodeURIComponent(agentGroupId)}`),
+  library: (agentGroupId: string) =>
+    request<LibraryFile[]>(`/api/agent-groups/${encodeURIComponent(agentGroupId)}/library`),
+  tasks: (agentGroupId: string) =>
+    request<TaskSummary[]>(`/api/agent-groups/${encodeURIComponent(agentGroupId)}/tasks`),
+  templates: () => request<Template[]>('/api/templates'),
+  createAgent: (template: string, name: string) =>
+    request<CreateAgentOutcome>('/api/agent-groups', {
+      method: 'POST',
+      body: JSON.stringify({ template, name }),
+    }),
+  markRead: (agentGroupId: string, messageId: string) =>
+    request<{ unread: number }>(`/api/agent-groups/${encodeURIComponent(agentGroupId)}/read`, {
+      method: 'POST',
+      body: JSON.stringify({ messageId }),
+    }),
+  inbox: () => request<ChatMessage[]>('/api/inbox'),
+  settings: () => request<{ timezone: string }>('/api/settings'),
+  answer: (messageId: string, value: string) =>
+    request<ChatMessage>(`/api/messages/${encodeURIComponent(messageId)}/answer`, {
+      method: 'POST',
+      body: JSON.stringify({ value }),
+    }),
+  answerForm: (messageId: string, values: FormValues) =>
+    request<ChatMessage>(`/api/messages/${encodeURIComponent(messageId)}/answer`, {
+      method: 'POST',
+      body: JSON.stringify({ values }),
     }),
 };
 

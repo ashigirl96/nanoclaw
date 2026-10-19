@@ -3,22 +3,42 @@ import type { AddressInfo } from 'net';
 import path from 'path';
 
 import { DATA_DIR } from '../../config.js';
-import { getAgentGroup, getAllAgentGroups } from '../../db/agent-groups.js';
+import { getAllAgentGroups } from '../../db/agent-groups.js';
 import { log } from '../../log.js';
 import type { ChannelAdapter, ChannelSetup } from '../adapter.js';
+import { ActivityBoard, currentToolOf, isMidTurn } from './activity.js';
+import { answersRoute } from './answers.js';
+import { isAnswerable } from './cards.js';
 import {
   CHANNEL_TYPE,
   CONSOLE_DEFAULTS,
   OWNER_USER_ID,
   agentGroupIdFrom,
+  chatOf,
   ensureConsoleChat,
   platformIdFor,
+  storeKeyOf,
 } from './chat.js';
+import { onAgentGroupsChanged } from './create-agent.js';
+import {
+  type ConsoleEvent,
+  HttpError,
+  type Route,
+  type RouteContext,
+  readJson,
+  requireAgentGroup,
+  sendJson,
+} from './http.js';
+import { inboxRoute } from './inbox.js';
 import { mimeTypeFor } from './mime.js';
+import { newAgentRoute } from './new-agent.js';
+import { noticeFor } from './notify.js';
+import { panelRoute } from './panel.js';
+import { cardOf } from './questions.js';
+import { settingsRoute } from './settings.js';
 import { serveStatic } from './static.js';
 import { type ChatMessage, ConsoleStore, type NewFile } from './store.js';
-
-type ConsoleEvent = { type: 'message'; message: ChatMessage };
+import { broadcastUnread, readRoute } from './unread.js';
 
 export interface ConsoleOptions {
   port: number;
@@ -30,16 +50,7 @@ export interface ConsoleAdapter extends ChannelAdapter {
   url(): string;
 }
 
-class HttpError extends Error {
-  constructor(
-    readonly status: number,
-    message: string,
-  ) {
-    super(message);
-  }
-}
-
-const MAX_BODY_BYTES = 50 * 1024 * 1024;
+const ROUTES: Route[] = [answersRoute, inboxRoute, readRoute, panelRoute, newAgentRoute, settingsRoute];
 
 export function consoleAdapterFromEnv(env: Record<string, string | undefined>): ConsoleAdapter | null {
   if (!env.CONSOLE_PORT) return null;
@@ -55,7 +66,11 @@ export function createConsoleAdapter(opts: ConsoleOptions): ConsoleAdapter {
   let server: http.Server | null = null;
   let store: ConsoleStore | null = null;
   let setupConfig: ChannelSetup | null = null;
+  let stopWatchingAgentGroups: (() => void) | null = null;
   const subscribers = new Set<http.ServerResponse>();
+  const activity = new ActivityBoard((agentGroupId, next) =>
+    broadcast({ type: 'activity', agentGroupId, activity: next }),
+  );
 
   function broadcast(event: ConsoleEvent): void {
     const frame = `data: ${JSON.stringify(event)}\n\n`;
@@ -69,12 +84,7 @@ export function createConsoleAdapter(opts: ConsoleOptions): ConsoleAdapter {
     req.on('close', () => subscribers.delete(res));
   }
 
-  async function requireAgentGroup(id: string): Promise<string> {
-    if (!(await getAgentGroup(id))) throw new HttpError(404, `unknown agent group ${id}`);
-    return id;
-  }
-
-  async function sendFromOwner(agentGroupId: string, body: Record<string, unknown>) {
+  async function sendFromOwner(agentGroupId: string, body: Record<string, unknown>): Promise<ChatMessage> {
     const text = typeof body.text === 'string' ? body.text : '';
     const files = parseUploads(body.files);
     if (!text && files.length === 0) throw new HttpError(400, 'text or files is required');
@@ -119,7 +129,13 @@ export function createConsoleAdapter(opts: ConsoleOptions): ConsoleAdapter {
       return sendJson(
         res,
         200,
-        groups.map((g) => ({ id: g.id, name: g.name, lastMessage: store!.lastMessage(g.id) })),
+        groups.map((g) => ({
+          id: g.id,
+          name: g.name,
+          lastMessage: store!.lastMessage(g.id),
+          activity: activity.get(g.id),
+          unread: store!.unreadCount(g.id),
+        })),
       );
     }
 
@@ -154,6 +170,18 @@ export function createConsoleAdapter(opts: ConsoleOptions): ConsoleAdapter {
       }
     }
 
+    const ctx: RouteContext = {
+      store: store!,
+      readBody: () => readJson(req),
+      broadcast,
+      sendFromOwner,
+      onAction: (...args) => setupConfig!.onAction(...args),
+    };
+    for (const answerRoute of ROUTES) {
+      const response = await answerRoute(route, ctx);
+      if (response) return sendJson(res, response.status, response.body);
+    }
+
     if (req.method === 'GET' && !url.pathname.startsWith('/api/')) return serveStatic(opts.distDir, url.pathname, res);
 
     throw new HttpError(404, 'not found');
@@ -168,6 +196,7 @@ export function createConsoleAdapter(opts: ConsoleOptions): ConsoleAdapter {
     async setup(config: ChannelSetup): Promise<void> {
       setupConfig = config;
       store = new ConsoleStore(path.join(opts.dataDir, 'console.db'));
+      stopWatchingAgentGroups = onAgentGroupsChanged(() => broadcast({ type: 'agent-groups' }));
       server = http.createServer((req, res) => {
         handle(req, res).catch((err) => {
           if (err instanceof HttpError) return sendJson(res, err.status, { error: err.message });
@@ -183,31 +212,47 @@ export function createConsoleAdapter(opts: ConsoleOptions): ConsoleAdapter {
     },
 
     async teardown(): Promise<void> {
+      stopWatchingAgentGroups?.();
       if (server) {
         server.closeAllConnections();
         await new Promise<void>((resolve) => server!.close(() => resolve()));
         server = null;
       }
+      activity.dispose();
       store?.close();
       store = null;
     },
 
     isConnected: () => server !== null,
 
-    async deliver(platformId, _threadId, message): Promise<string | undefined> {
+    async setTyping(platformId): Promise<void> {
       const agentGroupId = agentGroupIdFrom(platformId);
+      if (!agentGroupId || !store) return;
+      activity.touch(agentGroupId, await currentToolOf(agentGroupId, platformId));
+    },
+
+    async deliver(platformId, _threadId, message): Promise<string | undefined> {
       if (!store) return undefined;
-      if (!agentGroupId) {
+      const chat = chatOf(platformId);
+      if (!chat) {
         log.warn('Console dropped an Outbound Message for a platform id it has no Chat for', {
           platformId,
           kind: message.kind,
         });
         return undefined;
       }
+      const agentGroupId = storeKeyOf(chat);
+      const notice = noticeFor(chat, message);
+      if (notice) broadcast({ type: 'notify', ...notice });
       const content = (message.content ?? {}) as Record<string, unknown>;
 
       if (content.operation === 'edit' && typeof content.messageId === 'string') {
-        const edited = store.editMessage(agentGroupId, storeIdOf(content.messageId, agentGroupId), textOf(content));
+        const id = storeIdOf(content.messageId, agentGroupId);
+        const resolution = terminalResolutionOf(content);
+        const edited =
+          resolution === null
+            ? store.editMessage(agentGroupId, id, textOf(content))
+            : store.updateCard(agentGroupId, id, (c) => (isAnswerable(c) ? { ...c, resolution } : null));
         if (edited) broadcast({ type: 'message', message: edited });
         return undefined;
       }
@@ -226,8 +271,21 @@ export function createConsoleAdapter(opts: ConsoleOptions): ConsoleAdapter {
         mimeType: mimeTypeFor(f.filename),
         data: f.data,
       }));
-      const stored = store.addMessage({ agentGroupId, role: 'agent', text: textOf(content), files });
+      const carded = await cardOf(content);
+      const stored = store.addMessage({
+        agentGroupId,
+        role: 'agent',
+        text: carded?.text ?? textOf(content),
+        files,
+        card: carded?.card,
+      });
       broadcast({ type: 'message', message: stored });
+      if (agentGroupId !== null) {
+        broadcastUnread({ store, broadcast }, agentGroupId);
+        // The message is already stored, so a failed read must not fail the delivery and get it sent twice.
+        if (await isMidTurn(agentGroupId, platformId).catch(() => false)) activity.holdThroughDelivery(agentGroupId);
+        else activity.clear(agentGroupId);
+      }
       return stored.id;
     },
 
@@ -260,35 +318,18 @@ function parseUploads(raw: unknown): NewFile[] {
 }
 
 // The router stores an Owner message for the Agent as `<inbound id>:<agentGroupId>`, and edit/reaction echo that id back.
-function storeIdOf(messageId: string, agentGroupId: string): string {
+function storeIdOf(messageId: string, agentGroupId: string | null): string {
+  if (agentGroupId === null) return messageId;
   const suffix = `:${agentGroupId}`;
   return messageId.endsWith(suffix) ? messageId.slice(0, -suffix.length) : messageId;
+}
+
+function terminalResolutionOf(content: Record<string, unknown>): string | null {
+  const terminal = content.terminalCard as { resolution?: unknown } | undefined;
+  return typeof terminal?.resolution === 'string' ? terminal.resolution : null;
 }
 
 function textOf(content: Record<string, unknown>): string {
   if (typeof content.markdown === 'string') return content.markdown;
   return typeof content.text === 'string' ? content.text : '';
-}
-
-function sendJson(res: http.ServerResponse, status: number, body: unknown): void {
-  res.writeHead(status, { 'content-type': 'application/json' });
-  res.end(JSON.stringify(body));
-}
-
-async function readJson(req: http.IncomingMessage): Promise<Record<string, unknown>> {
-  const chunks: Buffer[] = [];
-  let size = 0;
-  for await (const chunk of req) {
-    size += (chunk as Buffer).length;
-    if (size > MAX_BODY_BYTES) throw new HttpError(413, 'request body too large');
-    chunks.push(chunk as Buffer);
-  }
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(Buffer.concat(chunks).toString('utf8'));
-  } catch (err) {
-    if (!(err instanceof SyntaxError)) throw err;
-  }
-  if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) return parsed as Record<string, unknown>;
-  throw new HttpError(400, 'body must be a JSON object');
 }
