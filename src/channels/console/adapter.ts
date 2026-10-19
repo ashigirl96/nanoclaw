@@ -292,6 +292,14 @@ export function createConsoleAdapter(opts: ConsoleOptions): ConsoleAdapter {
         });
         return undefined;
       }
+      // A removed participant's Session lives on, so a reply from a turn it was already in can still arrive.
+      if (chat.kind === 'group-chat' && !store.groupChatMembers(chat.groupChatId).includes(chat.agentGroupId)) {
+        log.warn('Console dropped a reply from an Agent that is no longer in the Group Chat', {
+          groupChatId: chat.groupChatId,
+          agentGroupId: chat.agentGroupId,
+        });
+        return undefined;
+      }
       const chatId = chatIdOf(chat);
       const speaker = speakerOf(chat);
       const notice = noticeFor(chat, message);
@@ -305,6 +313,10 @@ export function createConsoleAdapter(opts: ConsoleOptions): ConsoleAdapter {
           resolution === null
             ? store.editMessage(chatId, id, textOf(content))
             : store.updateCard(chatId, id, (c) => (isAnswerable(c) ? { ...c, resolution } : null));
+        if (edited && chat.kind === 'group-chat' && resolution === null) {
+          // Each version needs its own id: the other Sessions already hold the original under the message's id.
+          await relayToOtherMembers(chat.groupChatId, { ...edited, id: `${edited.id}:edit:${edited.editedAt}` }, []);
+        }
         if (edited) broadcast({ type: 'message', message: edited });
         return undefined;
       }

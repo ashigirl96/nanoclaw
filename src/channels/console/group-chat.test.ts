@@ -225,6 +225,40 @@ describe('Mention in a Group Chat', () => {
 });
 
 describe('replies in a Group Chat', () => {
+  it('drops a reply that arrives after its Agent was removed', async () => {
+    const chat = await createGroupChat('相談', ['ag-a', 'ag-b', 'ag-c']);
+    await api(`/api/group-chats/${chat.id}/members/ag-c`, { method: 'DELETE' });
+
+    const id = await adapter!.deliver(platformIdOf(chat, 'ag-c'), null, {
+      kind: 'chat',
+      content: { text: '遅れて返事' },
+    });
+
+    expect(id).toBeUndefined();
+    expect(await api<unknown[]>(`/api/group-chats/${chat.id}/messages`)).toEqual([]);
+    expect(await sessionMessages('ag-a', platformIdOf(chat, 'ag-a'))).toEqual([]);
+  });
+
+  it("passes an Agent's edit on to the others' Sessions", async () => {
+    const chat = await createGroupChat('相談', ['ag-a', 'ag-b']);
+    const id = await adapter!.deliver(platformIdOf(chat, 'ag-a'), null, {
+      kind: 'chat',
+      content: { text: '答えは 3' },
+    });
+
+    await adapter!.deliver(platformIdOf(chat, 'ag-a'), null, {
+      kind: 'chat',
+      content: { operation: 'edit', messageId: id, text: '答えは 4' },
+    });
+
+    expect(
+      (await sessionMessages('ag-b', platformIdOf(chat, 'ag-b'))).map((m) => [m.text, m.sender, m.trigger]),
+    ).toEqual([
+      ['答えは 3', 'Alice', 0],
+      ['答えは 4', 'Alice', 0],
+    ]);
+  });
+
   it("shows the reply as the Agent's and puts it in the others' Sessions without waking them", async () => {
     const chat = await createGroupChat('相談', ['ag-a', 'ag-b']);
     await say(chat, '@Alice 調べて');
