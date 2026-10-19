@@ -25,7 +25,26 @@ export interface LinkCard {
   links: CardLink[];
 }
 
-export type Card = ChoiceCard | LinkCard;
+export type Card = ChoiceCard | LinkCard | FormCard;
+
+export interface FormField {
+  id: string;
+  label: string;
+  type: 'text' | 'textarea' | 'select' | 'multi_select' | 'date';
+  /** The choices of a select or multi_select field. */
+  options?: string[];
+}
+
+/** A Question from post_question that asks for form inputs instead of one pick. */
+export interface FormCard {
+  type: 'form';
+  questionId: string;
+  title: string;
+  question: string;
+  fields: FormField[];
+  /** The answered values, one `<label>: <value>` line per field; null while it still takes an answer. */
+  resolution: string | null;
+}
 
 /** Reads an ask_question payload; `isQuestion` tells an Agent's Question from an Approval Request. */
 export function choiceCardFrom(content: Record<string, unknown>, isQuestion: boolean): ChoiceCard | null {

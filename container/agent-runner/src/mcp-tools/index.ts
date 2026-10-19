@@ -34,3 +34,4 @@ main().catch((err) => {
 });
 import './canvas.js';
 import './rooms.js';
+import './post-question.js';
