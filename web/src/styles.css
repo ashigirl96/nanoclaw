@@ -769,6 +769,7 @@ body.resizing {
   border: 1px solid var(--border);
   border-radius: 999px;
   background: var(--bg-hover);
+  color: var(--fg);
   text-decoration: none;
   cursor: pointer;
 }
@@ -867,15 +868,8 @@ body.resizing {
   }
 }
 
-.accounts {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  max-width: 720px;
-  margin: 0 auto;
-}
-
 .accounts-error {
+  margin-bottom: 12px;
   padding: 10px 14px;
   border: 1px solid var(--danger);
   border-radius: 10px;
@@ -945,4 +939,240 @@ body.resizing {
 
 .accounts-time {
   color: var(--fg-muted);
+}
+
+/* Connect apps */
+
+.app-icon {
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  color: #fff;
+  font-weight: 700;
+}
+
+.app-icon.sm {
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+  font-size: 0.65em;
+}
+
+.app-icon.logo {
+  background: #fff;
+  box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.08);
+}
+
+.app-icon.logo svg {
+  width: 58%;
+  height: 58%;
+}
+
+.app-icon.sm.logo svg {
+  width: 72%;
+  height: 72%;
+}
+
+.app-icon-stack {
+  display: inline-flex;
+  gap: 2px;
+}
+
+.sidebar-bottom {
+  padding: 10px 12px 14px;
+  border-top: 1px solid var(--border);
+}
+
+.connect-apps-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  padding: 9px 14px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--bg-raised);
+  color: var(--fg);
+  font: inherit;
+  cursor: pointer;
+}
+
+.connect-apps-button:hover {
+  background: var(--bg-hover);
+}
+
+.card.app-connect {
+  width: min(480px, 100%);
+}
+
+.message .bubble:has(+ .app-connect) {
+  align-self: flex-start;
+}
+
+.app-connect-main {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.app-connect-text {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.app-connect-name {
+  font-weight: 600;
+}
+
+.app-connect-note,
+.app-connect-foot {
+  color: var(--fg-muted);
+  font-size: 0.85em;
+}
+
+.connect-apps {
+  width: min(760px, calc(100vw - 32px));
+  height: min(720px, calc(100vh - 64px));
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--bg-sidebar);
+  color: var(--fg);
+}
+
+.connect-apps[open] {
+  display: flex;
+  flex-direction: column;
+}
+
+.connect-apps-head {
+  flex: none;
+  padding: 16px 24px 4px;
+}
+
+.connect-apps-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0 24px 24px;
+}
+
+.connect-apps::backdrop {
+  background: rgb(0 0 0 / 0.5);
+}
+
+.connect-apps-top {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.connect-apps-connected {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--fg-muted);
+  font: inherit;
+  font-size: 0.85em;
+  cursor: pointer;
+}
+
+.connect-apps-connected:hover,
+.connect-apps-connected[aria-pressed='true'] {
+  background: var(--bg-hover);
+  color: var(--fg);
+}
+
+.connect-apps-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 12px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--fg-muted);
+}
+
+.connect-apps-search input {
+  flex: 1;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--fg);
+  font: inherit;
+}
+
+.connect-apps-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 12px 0 4px;
+}
+
+.connect-apps-chip {
+  padding: 4px 12px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--bg-raised);
+  color: var(--fg);
+  font: inherit;
+  font-size: 0.85em;
+  cursor: pointer;
+}
+
+.connect-apps-chip[aria-pressed='true'] {
+  background: var(--fg);
+  color: var(--bg);
+}
+
+.connect-apps-heading {
+  margin: 20px 0 8px;
+  font-size: 0.95em;
+  font-weight: 600;
+}
+
+.connect-apps-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 4px 32px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.connect-apps-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 0;
+}
+
+.connect-apps-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.connect-apps-done {
+  color: var(--fg-muted);
+  font-size: 0.85em;
+}
+
+.connect-apps .accounts-row {
+  justify-content: flex-start;
 }

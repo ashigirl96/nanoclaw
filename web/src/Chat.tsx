@@ -10,7 +10,9 @@ import {
 
 import { type Activity, type ChatMessage, type Member, type Upload, readUpload } from './api';
 import { Avatar } from './Avatar';
+import { connectLinksIn } from './apps';
 import { CardView } from './Card';
+import { AppConnectCard } from './ConnectApps';
 import { FilePreview } from './FilePreview';
 import { ArrowUpIcon, PlusIcon } from './Icons';
 import { Markdown } from './Markdown';
@@ -91,12 +93,7 @@ export function Thread({
             {m.card ? (
               <CardView message={{ ...m, card: m.card }} onAnswered={onAnswered} onError={onError} />
             ) : (
-              m.text &&
-              (m.role === 'agent' ? (
-                <Markdown className="bubble" text={m.text} />
-              ) : (
-                <div className="bubble">{m.text}</div>
-              ))
+              m.text && (m.role === 'agent' ? <AgentText text={m.text} /> : <div className="bubble">{m.text}</div>)
             )}
             {m.files.map((f) => (
               <FilePreview key={f.id} file={f} />
@@ -111,6 +108,18 @@ export function Thread({
         </div>
       ))}
     </div>
+  );
+}
+
+function AgentText({ text }: { text: string }) {
+  const { links, rest } = connectLinksIn(text);
+  return (
+    <>
+      {rest && <Markdown className="bubble" text={rest} />}
+      {links.map((link) => (
+        <AppConnectCard key={link.provider} link={link} />
+      ))}
+    </>
   );
 }
 
