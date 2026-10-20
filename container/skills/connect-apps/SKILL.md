@@ -6,10 +6,11 @@ description: Standing context for offering an app connection when the user asks 
 # Connect apps — standing context
 
 A carrier for standing context, not an on-demand workflow. The payload is
-`instructions.md` in this directory, which the host composes into every
-group's CLAUDE.md at spawn.
+`instructions.md` in this directory, which the host composes into the
+CLAUDE.md of every group whose skill selection includes it (the default `all`
+does) at spawn.
 
-Fragments reach every group regardless of the selected gateway and its
+Fragments reach those groups regardless of the selected gateway and their
 `cli_scope`, so the content names neither a gateway nor `ncl`. It only gets
 the Agent to put a gateway's own `connect_url` on its own line, which the
 Console renders as an app card (`web/src/apps.ts`).
