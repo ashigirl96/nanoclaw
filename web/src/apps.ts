@@ -130,7 +130,7 @@ const U = String.raw`[^\s<>()\[\]"'` + '`' + String.raw`、。「」（）！？
 const CONNECT_URL = String.raw`https?://${U}+/connections\?${U}*\bconnect=${U}+`;
 // A markdown link or autolink goes whole, so no empty `[label]()` or `<>` is left behind.
 const CONNECT_MENTION = new RegExp(
-  String.raw`\[[^\]\n]*\]\(\s*(${CONNECT_URL})\s*\)|<(${CONNECT_URL})>|(${CONNECT_URL})`,
+  String.raw`\[[^\]\n]*\]\(\s*(${CONNECT_URL})(?:\s+(?:"[^"\n]*"|'[^'\n]*'))?\s*\)|<(${CONNECT_URL})>|(${CONNECT_URL})`,
   'g',
 );
 const TRAILING_PUNCTUATION = /[.,;:!?]+$/;
