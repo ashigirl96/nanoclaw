@@ -2,7 +2,8 @@ import { useState } from 'react';
 
 import type { AgentGroupSummary, ChatMessage, GroupChatSummary } from './api';
 import { Avatar } from './Avatar';
-import { GroupIcon, InboxIcon, LinkIcon, PlusIcon, SearchIcon } from './Icons';
+import { ConnectAppsButton } from './ConnectApps';
+import { GroupIcon, InboxIcon, PlusIcon, SearchIcon } from './Icons';
 
 interface Props {
   groups: AgentGroupSummary[];
@@ -11,14 +12,13 @@ interface Props {
   selected: string | null;
   inboxSelected: boolean;
   inboxWaiting: number;
-  accountsVisible: boolean;
-  accountsSelected: boolean;
   onSelect: (id: string) => void;
   onSelectGroupChat: (id: string) => void;
   onSelectInbox: () => void;
-  onSelectAccounts: () => void;
   onNewAgent: () => void;
   onNewGroupChat: () => void;
+  /** Unset when this Install's Gateway is not OneCLI. */
+  onConnectApps?: () => void;
 }
 
 export function Sidebar({
@@ -27,14 +27,12 @@ export function Sidebar({
   selected,
   inboxSelected,
   inboxWaiting,
-  accountsVisible,
-  accountsSelected,
   onSelect,
   onSelectGroupChat,
   onSelectInbox,
-  onSelectAccounts,
   onNewAgent,
   onNewGroupChat,
+  onConnectApps,
 }: Props) {
   const [searching, setSearching] = useState(false);
   const [query, setQuery] = useState('');
@@ -95,19 +93,6 @@ export function Sidebar({
                   {inboxWaiting}
                 </span>
               )}
-            </button>
-          </li>
-        )}
-        {!needle && accountsVisible && (
-          <li>
-            <button type="button" className={accountsSelected ? 'group selected' : 'group'} onClick={onSelectAccounts}>
-              <span className="avatar md inbox-avatar" aria-hidden="true">
-                <LinkIcon />
-              </span>
-              <span className="group-text">
-                <span className="group-name">Connected Accounts</span>
-                <span className="group-excerpt">OneCLI につないだアカウント</span>
-              </span>
             </button>
           </li>
         )}
@@ -175,6 +160,11 @@ export function Sidebar({
         ))}
         {!needle && groupChats.length === 0 && <li className="sidebar-none">まだ Group Chat はありません</li>}
       </ul>
+      {onConnectApps && (
+        <div className="sidebar-bottom">
+          <ConnectAppsButton onClick={onConnectApps} />
+        </div>
+      )}
     </nav>
   );
 }
