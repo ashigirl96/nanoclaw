@@ -23,6 +23,7 @@ import { startHostModules, stopHostModules } from './host-lifecycle.js';
 import { startGatewayApprovalCoordinator, stopGatewayApprovalCoordinator } from './gateway-approval-coordinator.js';
 import { startGatewayAvailabilityMonitor } from './gateway-availability.js';
 import { getGatewayProvider } from './gateway-providers/index.js';
+import { createInboundGate } from './inbound-gate.js';
 import { routeInbound } from './router.js';
 import { log } from './log.js';
 import { enforceUpgradeTripwire } from './upgrade-state.js';
@@ -96,16 +97,13 @@ async function main(): Promise<void> {
   // Prepare the runtime; inbound routing waits until approval health and adoption are ready.
   await getSessionDriver().ensureReady?.();
   await startHostInstanceLease();
-  let releaseInbound!: () => void;
-  const inboundReady = new Promise<void>((resolve) => {
-    releaseInbound = resolve;
-  });
+  const inbound = createInboundGate();
 
   // 2. Channel adapters
   await initChannelAdapters((adapter: ChannelAdapter): ChannelSetup => {
     return {
       onInbound(platformId, threadId, message) {
-        return inboundReady
+        const routed = inbound.ready
           .then(() =>
             routeInbound({
               channelType: adapter.channelType,
@@ -127,9 +125,10 @@ async function main(): Promise<void> {
           .catch((err) => {
             log.error('Failed to route inbound message', { channelType: adapter.channelType, err });
           });
+        return inbound.awaitable(routed);
       },
       onInboundEvent(event) {
-        return inboundReady
+        const routed = inbound.ready
           .then(() => routeInbound(event))
           .catch((err) => {
             log.error('Failed to route inbound event', {
@@ -138,6 +137,7 @@ async function main(): Promise<void> {
               err,
             });
           });
+        return inbound.awaitable(routed);
       },
       onMetadata(platformId, name, isGroup) {
         log.info('Channel metadata discovered', {
@@ -183,7 +183,7 @@ async function main(): Promise<void> {
     resumeGatewaySessionAdmission,
   );
   await adoptRunningSessions();
-  releaseInbound();
+  inbound.release();
 
   // 6. Start registered host modules. Imports only registered callbacks; the
   // actual work begins here, after DB + delivery are ready and before polls.

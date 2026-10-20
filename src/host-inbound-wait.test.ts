@@ -76,6 +76,13 @@ vi.mock('./channels/channel-registry.js', async () => ({
   ...(await vi.importActual('./channels/channel-registry.js')),
   initChannelAdapters: async (setup: (adapter: ChannelAdapter) => ChannelSetup) => {
     state.hostSetup = setup;
+    // Like a Chat SDK bridge whose initialize() hands it a message before setup() returns.
+    await setup({ channelType: 'early' } as ChannelAdapter).onInbound('early:chat', null, {
+      id: 'early',
+      kind: 'chat',
+      content: {},
+      timestamp: new Date().toISOString(),
+    });
   },
 }));
 
