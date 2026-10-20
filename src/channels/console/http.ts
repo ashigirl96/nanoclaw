@@ -21,18 +21,25 @@ export class HttpError extends Error {
 
 export type ConsoleEvent =
   | { type: 'message'; message: ChatMessage }
-  | { type: 'activity'; agentGroupId: string; activity: Activity }
-  | { type: 'unread'; agentGroupId: string; unread: number }
+  | { type: 'activity'; chatId: string; agentGroupId: string; activity: Activity }
+  | { type: 'unread'; chatId: string; unread: number }
   | ({ type: 'notify' } & Notice)
-  | { type: 'agent-groups' };
+  | { type: 'agent-groups' }
+  | { type: 'group-chats' };
+
+export interface OwnerMessageOptions {
+  /** Agent Groups to wake in a Group Chat even when the text names no one. */
+  addressedTo?: string[];
+}
 
 export interface RouteContext {
   store: ConsoleStore;
   slackAvatars: SlackAvatars;
   readBody(): Promise<Record<string, unknown>>;
   broadcast(event: ConsoleEvent): void;
-  sendFromOwner(agentGroupId: string, body: Record<string, unknown>): Promise<ChatMessage>;
+  sendFromOwner(chatId: string, body: Record<string, unknown>, options?: OwnerMessageOptions): Promise<ChatMessage>;
   onAction: ChannelSetup['onAction'];
+  activityOf(chatId: string, agentGroupId: string): Activity;
 }
 
 export interface RouteResponse {

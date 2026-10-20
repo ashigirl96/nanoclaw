@@ -63,3 +63,12 @@ export const PanelIcon = () => (
     <path d="M15 4v16" />
   </Icon>
 );
+
+export const GroupIcon = () => (
+  <Icon size={16}>
+    <circle cx="9" cy="9" r="3" />
+    <circle cx="17" cy="10" r="2.5" />
+    <path d="M3.5 19c.6-3 2.8-4.5 5.5-4.5s4.9 1.5 5.5 4.5" />
+    <path d="M15 15c2.6-.4 4.8.9 5.5 3.5" />
+  </Icon>
+);

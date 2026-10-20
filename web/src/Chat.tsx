@@ -8,7 +8,7 @@ import {
   useState,
 } from 'react';
 
-import { type AgentGroupSummary, type ChatMessage, type Upload, api, readUpload } from './api';
+import { type Activity, type ChatMessage, type Member, type Upload, readUpload } from './api';
 import { Avatar } from './Avatar';
 import { CardView } from './Card';
 import { FilePreview } from './FilePreview';
@@ -16,45 +16,52 @@ import { ArrowUpIcon, PlusIcon } from './Icons';
 import { Markdown } from './Markdown';
 import { startsNewStretch, useFormatDivider } from './time';
 
-interface Props {
-  group: AgentGroupSummary;
-  messages: ChatMessage[];
-  onSent: (message: ChatMessage) => void;
-  onError: (message: string) => void;
-  panelOpen: boolean;
-  onTogglePanel: () => void;
-  headerAction?: ReactNode;
+export interface Worker extends Member {
+  activity: Activity;
 }
 
-export function Chat({ group, messages, onSent, onError, panelOpen, onTogglePanel, headerAction }: Props) {
+interface Props {
+  title: ReactNode;
+  messages: ChatMessage[];
+  /** Who is working in this Chat now; a Group Chat names each of them. */
+  working: Worker[];
+  send: (text: string, uploads: Upload[]) => Promise<ChatMessage>;
+  onSent: (message: ChatMessage) => void;
+  onError: (message: string) => void;
+  /** The participants of a Group Chat, offered when the Owner types `@`. */
+  members?: Member[];
+  /** Set in a Group Chat, where each Agent message shows who sent it, even after they left. */
+  nameOf?: (agentGroupId: string) => string;
+}
+
+export function Chat({ title, messages, working, send, onSent, onError, members, nameOf }: Props) {
   const bottom = useRef<HTMLDivElement>(null);
+  const busy = working.length > 0;
+  const authorOf = nameOf && ((id: string) => ({ id, name: nameOf(id) }));
 
   useEffect(() => {
     bottom.current?.scrollIntoView({ block: 'end' });
-  }, [messages.length, group.activity.working]);
+  }, [messages.length, busy]);
 
   return (
     <section className="chat">
       <div className="chat-scroll">
-        <div className="chat-title">
-          <button type="button" className="chat-pill" aria-expanded={panelOpen} onClick={onTogglePanel}>
-            <Avatar id={group.id} name={group.name} url={group.avatarUrl} size="sm" />
-            {group.name}
-          </button>
-          {headerAction}
-        </div>
-        <Thread messages={messages} onAnswered={onSent} onError={onError} />
-        {group.activity.working && (
+        <div className="chat-title">{title}</div>
+        <Thread messages={messages} onAnswered={onSent} onError={onError} authorOf={authorOf} />
+        {busy && (
           <div className="thread">
-            <div className="working" role="status">
-              <span className="working-dot" />
-              {group.activity.tool ? `${group.activity.tool} を実行中…` : '作業中…'}
-            </div>
+            {working.map((w) => (
+              <div key={w.id} className="working" role="status">
+                <span className="working-dot" />
+                {members && `${w.name}: `}
+                {w.activity.tool ? `${w.activity.tool} を実行中…` : '作業中…'}
+              </div>
+            ))}
           </div>
         )}
         <div ref={bottom} />
       </div>
-      <Composer group={group} onSent={onSent} onError={onError} />
+      <Composer send={send} onSent={onSent} onError={onError} members={members} />
     </section>
   );
 }
@@ -63,10 +70,13 @@ export function Thread({
   messages,
   onAnswered,
   onError,
+  authorOf,
 }: {
   messages: ChatMessage[];
   onAnswered: (message: ChatMessage) => void;
   onError: (message: string) => void;
+  /** Set in a Group Chat, where each Agent message shows who sent it. */
+  authorOf?: (agentGroupId: string) => Member;
 }) {
   const formatDivider = useFormatDivider();
   return (
@@ -77,6 +87,7 @@ export function Thread({
             <div className="divider">{formatDivider(m.createdAt)}</div>
           )}
           <article className={`message ${m.role}${m.card ? ' with-card' : ''}`}>
+            {authorOf && m.agentGroupId && <Author member={authorOf(m.agentGroupId)} />}
             {m.card ? (
               <CardView message={{ ...m, card: m.card }} onAnswered={onAnswered} onError={onError} />
             ) : (
@@ -103,19 +114,33 @@ export function Thread({
   );
 }
 
+function Author({ member }: { member: Member }) {
+  return (
+    <span className="message-author">
+      <Avatar id={member.id} name={member.name} size="sm" />
+      {member.name}
+    </span>
+  );
+}
+
 function Composer({
-  group,
+  send,
   onSent,
   onError,
+  members,
 }: {
-  group: AgentGroupSummary;
+  send: (text: string, uploads: Upload[]) => Promise<ChatMessage>;
   onSent: (message: ChatMessage) => void;
   onError: (message: string) => void;
+  members?: Member[];
 }) {
   const [text, setText] = useState('');
   const [uploads, setUploads] = useState<Upload[]>([]);
   const [sending, setSending] = useState(false);
+  const [caret, setCaret] = useState(0);
+  const [picked, setPicked] = useState(0);
   const input = useRef<HTMLTextAreaElement>(null);
+  const mention = members ? mentionAt(text, caret, members) : null;
 
   useLayoutEffect(() => {
     const el = input.current;
@@ -129,7 +154,7 @@ function Composer({
     if (sending || (!text.trim() && uploads.length === 0)) return;
     setSending(true);
     try {
-      onSent(await api.send(group.id, text, uploads));
+      onSent(await send(text, uploads));
       setText('');
       setUploads([]);
     } catch (err) {
@@ -139,8 +164,32 @@ function Composer({
     }
   }
 
+  function complete(member: Member) {
+    if (!mention) return;
+    const inserted = `@${member.name} `;
+    const next = text.slice(0, mention.start) + inserted + text.slice(caret);
+    const at = mention.start + inserted.length;
+    setText(next);
+    setCaret(at);
+    requestAnimationFrame(() => input.current?.setSelectionRange(at, at));
+  }
+
   function onKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
-    if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) void submit(e);
+    if (e.nativeEvent.isComposing) return;
+    if (mention && mention.candidates.length > 0) {
+      const count = mention.candidates.length;
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        setPicked((i) => (i + (e.key === 'ArrowDown' ? 1 : count - 1)) % count);
+        return;
+      }
+      if (e.key === 'Enter' || e.key === 'Tab') {
+        e.preventDefault();
+        complete(mention.candidates[Math.min(picked, count - 1)]);
+        return;
+      }
+    }
+    if (e.key === 'Enter' && !e.shiftKey) void submit(e);
   }
 
   async function attach(list: FileList | null) {
@@ -158,6 +207,18 @@ function Composer({
   return (
     <form className="composer" onSubmit={submit}>
       <div className="composer-box">
+        {mention && mention.candidates.length > 0 && (
+          <ul className="mention-list" role="listbox" aria-label="Mention する Agent">
+            {mention.candidates.map((m, i) => (
+              <li key={m.id} role="option" aria-selected={i === Math.min(picked, mention.candidates.length - 1)}>
+                <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => complete(m)}>
+                  <Avatar id={m.id} name={m.name} size="sm" />
+                  {m.name}
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
         {uploads.length > 0 && (
           <ul className="uploads">
             {uploads.map((u, i) => (
@@ -190,9 +251,16 @@ function Composer({
           <textarea
             ref={input}
             value={text}
-            placeholder="回答を入力するか、別の話題について話してください"
+            placeholder={
+              members ? '@ で Agent を呼んで話しかけてください' : '回答を入力するか、別の話題について話してください'
+            }
             rows={1}
-            onChange={(e) => setText(e.target.value)}
+            onChange={(e) => {
+              setText(e.target.value);
+              setCaret(e.target.selectionStart);
+              setPicked(0);
+            }}
+            onSelect={(e) => setCaret(e.currentTarget.selectionStart)}
             onKeyDown={onKeyDown}
           />
           <button type="submit" className="send-button" aria-label="送信" disabled={sending || empty}>
@@ -202,6 +270,15 @@ function Composer({
       </div>
     </form>
   );
+}
+
+/** The `@…` being typed right before the caret, and the participants whose names it starts. */
+function mentionAt(text: string, caret: number, members: Member[]): { start: number; candidates: Member[] } | null {
+  const typed = /@([^\s@]*)$/.exec(text.slice(0, caret));
+  if (!typed) return null;
+  const prefix = typed[1].toLowerCase();
+  const candidates = members.filter((m) => m.name.toLowerCase().startsWith(prefix));
+  return { start: typed.index, candidates };
 }
 
 const EMOJI: Record<string, string> = {

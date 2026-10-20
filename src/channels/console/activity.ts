@@ -17,52 +17,65 @@ const WORKING_TTL_MS = 9000;
 const DELIVERY_HOLD_MS = 15_000;
 
 interface Entry {
+  chatId: string;
+  agentGroupId: string;
   activity: Activity;
   timer: NodeJS.Timeout;
 }
 
+/** What each Agent is doing in each Chat; a Group Chat shows one mark per participant. */
 export class ActivityBoard {
   private readonly entries = new Map<string, Entry>();
 
-  constructor(private readonly onChange: (agentGroupId: string, activity: Activity) => void) {}
+  constructor(private readonly onChange: (chatId: string, agentGroupId: string, activity: Activity) => void) {}
 
-  get(agentGroupId: string): Activity {
-    return this.entries.get(agentGroupId)?.activity ?? IDLE;
+  get(chatId: string, agentGroupId: string): Activity {
+    return this.entries.get(keyOf(chatId, agentGroupId))?.activity ?? IDLE;
   }
 
-  touch(agentGroupId: string, tool: string | null): void {
-    const previous = this.entries.get(agentGroupId);
+  touch(chatId: string, agentGroupId: string, tool: string | null): void {
+    const key = keyOf(chatId, agentGroupId);
+    const previous = this.entries.get(key);
     if (previous) clearTimeout(previous.timer);
     const activity = { working: true, tool };
-    this.entries.set(agentGroupId, { activity, timer: this.expireAfter(agentGroupId, WORKING_TTL_MS) });
-    if (!previous || previous.activity.tool !== tool) this.onChange(agentGroupId, activity);
+    this.entries.set(key, { chatId, agentGroupId, activity, timer: this.expireAfter(key, WORKING_TTL_MS) });
+    if (!previous || previous.activity.tool !== tool) this.onChange(chatId, agentGroupId, activity);
   }
 
-  holdThroughDelivery(agentGroupId: string): void {
-    const entry = this.entries.get(agentGroupId);
+  holdThroughDelivery(chatId: string, agentGroupId: string): void {
+    const key = keyOf(chatId, agentGroupId);
+    const entry = this.entries.get(key);
     if (!entry) return;
     clearTimeout(entry.timer);
-    entry.timer = this.expireAfter(agentGroupId, DELIVERY_HOLD_MS);
+    entry.timer = this.expireAfter(key, DELIVERY_HOLD_MS);
   }
 
-  private expireAfter(agentGroupId: string, ms: number): NodeJS.Timeout {
-    const timer = setTimeout(() => this.clear(agentGroupId), ms);
+  private expireAfter(key: string, ms: number): NodeJS.Timeout {
+    const timer = setTimeout(() => this.clearKey(key), ms);
     timer.unref();
     return timer;
   }
 
-  clear(agentGroupId: string): void {
-    const entry = this.entries.get(agentGroupId);
+  clear(chatId: string, agentGroupId: string): void {
+    this.clearKey(keyOf(chatId, agentGroupId));
+  }
+
+  private clearKey(key: string): void {
+    const entry = this.entries.get(key);
     if (!entry) return;
     clearTimeout(entry.timer);
-    this.entries.delete(agentGroupId);
-    this.onChange(agentGroupId, IDLE);
+    this.entries.delete(key);
+    this.onChange(entry.chatId, entry.agentGroupId, IDLE);
   }
 
   dispose(): void {
     for (const entry of this.entries.values()) clearTimeout(entry.timer);
     this.entries.clear();
   }
+}
+
+function keyOf(chatId: string, agentGroupId: string): string {
+  return `${chatId}\n${agentGroupId}`;
 }
 
 export async function currentToolOf(agentGroupId: string, platformId: string): Promise<string | null> {

@@ -86,7 +86,7 @@ export async function stopConsole(): Promise<void> {
   tmp = null;
 }
 
-async function openEvents(baseUrl: string): Promise<EventStream> {
+export async function openEvents(baseUrl: string): Promise<EventStream> {
   const controller = new AbortController();
   const res = await fetch(baseUrl + '/api/events', { signal: controller.signal });
   const reader = res.body!.getReader();
