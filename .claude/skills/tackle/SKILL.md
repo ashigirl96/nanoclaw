@@ -16,7 +16,7 @@ Skill tool の `implement` を呼び、その手順に従う。手順の中の�
 
 - テストスイート全体は手元で流さず、PR の CI の `gate` に任せる。手元では型チェック（`pnpm exec tsc --noEmit`、`container/agent-runner/` を触ったら `pnpm exec tsc -p container/agent-runner/tsconfig.json --noEmit` も）と、触ったテストファイルだけを流す。
 - code-review の fixed point は `git merge-base origin/main HEAD` で出した SHA にする。worktree のローカルの `main` は古いことがあり、他の PR の変更が diff に混ざるため。`$(...)` を含む git は worktree の session の guard が拒むので、SHA は先に出しておく。この時点の変更はまだコミットしていないので、新しいファイルを `git add -N` で載せてから `git diff <SHA>` で渡す。
-- コミットメッセージは scratchpad の file に書き、`git commit -F <file>` で渡す。worktree の session の guard は、heredoc やつないだコマンドで打つ git を拒むため。
+- コミットメッセージは scratchpad の file に書き、`git commit -q -F <file> >/dev/null 2>&1` で渡し、`git log --oneline -1` で載ったことを確かめる。worktree の session の guard は、heredoc やつないだコマンドで打つ git を拒むため。pre-commit の hook は `src/` の全ファイルを prettier に通して 1 行ずつ出すため。
 
 ## 3. PR を出す
 
