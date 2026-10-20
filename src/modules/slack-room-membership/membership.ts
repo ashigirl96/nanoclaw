@@ -39,14 +39,8 @@
  */
 import { resolveUnknownSenderPolicy } from '../../channels/channel-defaults.js';
 import type { InboundEvent } from '../../channels/adapter.js';
-import {
-  botTokenKeyForInstance,
-  slackAuthTest,
-  slackCall,
-  slackConversationsInfo,
-  slackConversationsMembers,
-  slackPostMessage,
-} from '../../channels/slack-lib.js';
+import { slackCall, slackConversationsInfo, slackConversationsMembers } from '../../channels/slack-form-read.js';
+import { botTokenKeyForInstance, slackAuthTest, slackPostMessage } from '../../channels/slack-lib.js';
 import { projectDestinationsToSessions } from '../../cli/resources/destinations.js';
 import { getAgentGroup } from '../../db/agent-groups.js';
 import { getContainerConfig } from '../../db/container-configs.js';

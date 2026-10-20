@@ -161,6 +161,7 @@ vi.mock('../../channels/slack-lib.js', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   ...mockApi,
 }));
+vi.mock('../../channels/slack-form-read.js', () => mockApi);
 vi.mock('./env-file.js', () => mockEnv);
 vi.mock('../permissions/channel-approval.js', () => ({
   requestChannelApproval: (...a: unknown[]) => mockRequestChannelApproval(...a),

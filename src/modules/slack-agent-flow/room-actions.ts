@@ -39,7 +39,8 @@ import {
   getDestinationByTarget,
   normalizeName,
 } from '../agent-to-agent/db/agent-destinations.js';
-import { botTokenKeyForInstance, slackAuthTest, slackConversationsMembers } from '../../channels/slack-lib.js';
+import { slackConversationsMembers } from '../../channels/slack-form-read.js';
+import { botTokenKeyForInstance, slackAuthTest } from '../../channels/slack-lib.js';
 import { notifyAgent, requestApproval } from '../approvals/index.js';
 import { readEnvValue } from './env-file.js';
 import { ensureAgentRoom, publicPurpose, resolveOperatorSlackUserId, type RoomParticipant } from './orchestrate.js';
