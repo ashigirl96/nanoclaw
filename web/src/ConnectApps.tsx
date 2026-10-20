@@ -82,13 +82,15 @@ export function ConnectAppsDialog({ error, onClose }: { error: string | null; on
   const apps = useConnectedApps();
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<Filter>('すべて');
-  const [showConnected, setShowConnected] = useState(false);
+  const [connectedPicked, setConnectedPicked] = useState(false);
 
   useEffect(() => {
     if (dialog.current && !dialog.current.open) dialog.current.showModal();
   }, []);
 
   const connected = apps?.filter(isConnected) ?? [];
+  // The last account can go while this view is open, and the toggle back lives on the count.
+  const showConnected = connectedPicked && connected.length > 0;
   const needle = query.trim().toLowerCase();
   const matches = (apps ?? []).filter(
     (a) => !needle || a.name.toLowerCase().includes(needle) || a.provider.includes(needle),
@@ -111,7 +113,7 @@ export function ConnectAppsDialog({ error, onClose }: { error: string | null; on
               type="button"
               className="connect-apps-connected"
               aria-pressed={showConnected}
-              onClick={() => setShowConnected((s) => !s)}
+              onClick={() => setConnectedPicked((s) => !s)}
             >
               <AppIconStack apps={connected} max={4} />
               {connected.length}件接続済み {showConnected ? '‹' : '›'}

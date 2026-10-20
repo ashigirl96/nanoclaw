@@ -10,7 +10,7 @@ import {
 
 import { type Activity, type ChatMessage, type Member, type Upload, readUpload } from './api';
 import { Avatar } from './Avatar';
-import { connectLinksIn } from './apps';
+import { connectLinksIn, useConnectedApps } from './apps';
 import { CardView } from './Card';
 import { AppConnectCard } from './ConnectApps';
 import { FilePreview } from './FilePreview';
@@ -112,7 +112,8 @@ export function Thread({
 }
 
 function AgentText({ text }: { text: string }) {
-  const { links, rest } = connectLinksIn(text);
+  const apps = useConnectedApps();
+  const { links, rest } = apps ? connectLinksIn(text, apps) : { links: [], rest: text };
   return (
     <>
       {rest && <Markdown className="bubble" text={rest} />}

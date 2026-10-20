@@ -125,7 +125,7 @@ export interface ConnectLink {
   url: string;
 }
 
-const CODE = /(```[\s\S]*?(?:```|$)|`[^`\n]*`)/;
+const CODE = /((?:`{3,}|~{3,})[\s\S]*?(?:`{3,}|~{3,}|$)|``[^\n]*?``|`[^`\n]*`)/;
 const U = String.raw`[^\s<>()\[\]"'` + '`' + String.raw`、。「」（）！？]`;
 const CONNECT_URL = String.raw`https?://${U}+/connections\?${U}*\bconnect=${U}+`;
 // A markdown link or autolink goes whole, so no empty `[label]()` or `<>` is left behind.
@@ -135,13 +135,14 @@ const CONNECT_MENTION = new RegExp(
 );
 const TRAILING_PUNCTUATION = /[.,;:!?]+$/;
 
-export function connectLinksIn(text: string): { links: ConnectLink[]; rest: string } {
+// Only a link to a known app on OneCLI's own origin earns the trusted card; anything else stays visible text.
+export function connectLinksIn(text: string, apps: ConnectedApp[]): { links: ConnectLink[]; rest: string } {
   const links: ConnectLink[] = [];
   const take = (match: string, ...urls: Array<string | undefined>) => {
     const raw = urls.find(Boolean) ?? match;
     const trailing = raw.match(TRAILING_PUNCTUATION)?.[0] ?? '';
     const url = raw.slice(0, raw.length - trailing.length);
-    const provider = providerOf(url);
+    const provider = providerOf(url, apps);
     if (!provider) return match;
     if (!links.some((l) => l.provider === provider)) links.push({ provider, url });
     return trailing;
@@ -159,12 +160,15 @@ export function connectLinksIn(text: string): { links: ConnectLink[]; rest: stri
   return { links, rest: segments.join('').trim() };
 }
 
-function providerOf(url: string): string | null {
+function providerOf(url: string, apps: ConnectedApp[]): string | null {
+  let parsed: URL;
   try {
-    return new URL(url).searchParams.get('connect');
+    parsed = new URL(url);
   } catch {
     return null;
   }
+  const app = apps.find((a) => a.provider === parsed.searchParams.get('connect'));
+  return app && new URL(app.connectUrl).origin === parsed.origin ? app.provider : null;
 }
 
 /** null until OneCLI's list loads, and always on an Install whose Gateway is not OneCLI. */
