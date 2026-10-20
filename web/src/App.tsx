@@ -279,7 +279,7 @@ export function App() {
                     aria-expanded={panelOpen}
                     onClick={() => setPanelOpen((open) => !open)}
                   >
-                    <Avatar id={current.id} name={current.name} size="sm" />
+                    <Avatar id={current.id} name={current.name} url={current.avatarUrl} size="sm" />
                     {current.name}
                   </button>
                   {!panelOpen && (

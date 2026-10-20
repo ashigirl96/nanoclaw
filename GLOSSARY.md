@@ -81,6 +81,14 @@ _Avoid_: room, multi-agent chat
 Console で Agent Group ごとに見られる、その Agent が Console に届けたファイルの一覧。
 _Avoid_: artifacts, files, workspace
 
+**Label**:
+Console で Agent Group の名前の下に添える、その Agent の役割を書いた短い一行。名前とは別のもので、Agent 自身は知らない。
+_Avoid_: tagline, subtitle, description, display name
+
+**Avatar**:
+Console で Agent Group を表す画像。Owner が選んだ画像が無ければ、その Agent Group 専用の Slack bot の画像を使う。
+_Avoid_: icon, profile picture
+
 **Channel**:
 NanoClaw が 1 つの identity で Platform につなぐ連携。1 つの Platform に複数の Channel を持てる。
 _Avoid_: adapter, adapter instance, bot, Platform の意味や Chat の意味で "channel" を使うこと

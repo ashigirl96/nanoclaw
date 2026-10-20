@@ -304,3 +304,32 @@
     grid-template-columns: 1fr;
   }
 }
+
+.label-field {
+  display: flex;
+  gap: 6px;
+}
+
+.label-field input {
+  flex: 1;
+  min-width: 0;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--fg);
+  font: inherit;
+}
+
+.avatar-field {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.panel-hint {
+  flex-basis: 100%;
+  color: var(--fg-muted);
+  font-size: 0.8em;
+}

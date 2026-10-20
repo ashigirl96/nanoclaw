@@ -71,7 +71,12 @@ export interface Activity {
   tool: string | null;
 }
 
-export interface AgentGroupSummary {
+export interface AppearanceSummary {
+  label: string | null;
+  avatarUrl: string | null;
+}
+
+export interface AgentGroupSummary extends AppearanceSummary {
   id: string;
   chatId: string;
   name: string;
@@ -109,11 +114,13 @@ export interface Upload {
   data: string;
 }
 
-export interface AgentGroupDetails {
+export interface AgentGroupDetails extends AppearanceSummary {
   id: string;
   name: string;
   folder: string;
   createdAt: string;
+  avatarSource: 'upload' | 'slack' | null;
+  ownSlackBot: boolean;
 }
 
 export interface LibraryFile extends StoredFile {
@@ -183,6 +190,26 @@ export const api = {
     }),
   details: (agentGroupId: string) =>
     request<AgentGroupDetails>(`/api/agent-groups/${encodeURIComponent(agentGroupId)}`),
+  setLabel: (agentGroupId: string, label: string) =>
+    request<AppearanceSummary>(`/api/agent-groups/${encodeURIComponent(agentGroupId)}/label`, {
+      method: 'POST',
+      body: JSON.stringify({ label }),
+    }),
+  uploadAvatar: (agentGroupId: string, image: Upload) =>
+    request<AppearanceSummary>(`/api/agent-groups/${encodeURIComponent(agentGroupId)}/avatar`, {
+      method: 'POST',
+      body: JSON.stringify(image),
+    }),
+  removeAvatar: (agentGroupId: string) =>
+    request<AppearanceSummary>(`/api/agent-groups/${encodeURIComponent(agentGroupId)}/avatar`, {
+      method: 'DELETE',
+      body: '{}',
+    }),
+  refetchSlackAvatar: (agentGroupId: string) =>
+    request<AppearanceSummary>(`/api/agent-groups/${encodeURIComponent(agentGroupId)}/avatar/slack`, {
+      method: 'POST',
+      body: '{}',
+    }),
   library: (agentGroupId: string) =>
     request<LibraryFile[]>(`/api/agent-groups/${encodeURIComponent(agentGroupId)}/library`),
   tasks: (agentGroupId: string) =>

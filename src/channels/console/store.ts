@@ -1,3 +1,5 @@
+import { createHash } from 'crypto';
+
 import Database from 'better-sqlite3';
 
 import type { Card } from './cards.js';
@@ -40,6 +42,31 @@ export interface GroupChat {
   name: string;
   createdAt: string;
 }
+
+export type AvatarSource = 'upload' | 'slack';
+
+export interface Image {
+  mimeType: string;
+  data: Buffer;
+}
+
+export interface Appearance {
+  label: string | null;
+  /** The Avatar shown, upload first; null when neither is stored. `version` changes whenever its bytes do. */
+  avatar: { source: AvatarSource; version: string } | null;
+  hasSlackAvatar: boolean;
+}
+
+interface AppearanceRow {
+  label: string | null;
+  uploaded_avatar_version: string | null;
+  slack_avatar_version: string | null;
+}
+
+const AVATAR_COLUMNS: Record<AvatarSource, { type: string; data: string; version: string }> = {
+  upload: { type: 'uploaded_avatar_type', data: 'uploaded_avatar', version: 'uploaded_avatar_version' },
+  slack: { type: 'slack_avatar_type', data: 'slack_avatar', version: 'slack_avatar_version' },
+};
 
 interface MessageRow {
   id: string;
@@ -111,10 +138,24 @@ const MIGRATIONS = [
      joined_at TEXT NOT NULL,
      PRIMARY KEY (group_chat_id, agent_group_id)
    );`,
+  `CREATE TABLE agent_group_appearance (
+     agent_group_id TEXT PRIMARY KEY,
+     label TEXT,
+     uploaded_avatar_type TEXT,
+     uploaded_avatar BLOB,
+     uploaded_avatar_version TEXT,
+     slack_avatar_type TEXT,
+     slack_avatar BLOB,
+     slack_avatar_version TEXT
+   );`,
 ];
 
 // agent_group_id is NOT NULL, and no Agent Group can have an empty id.
 const NO_AGENT_GROUP = '';
+
+function versionOf(image: Image): string {
+  return createHash('sha256').update(image.mimeType).update(image.data).digest('hex').slice(0, 16);
+}
 
 function newId(prefix: string): string {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
@@ -305,6 +346,51 @@ export class ConsoleStore {
       mimeType: r.mime_type,
       createdAt: r.created_at,
     }));
+  }
+
+  getAppearance(agentGroupId: string): Appearance {
+    const row = this.db
+      .prepare(
+        'SELECT label, uploaded_avatar_version, slack_avatar_version FROM agent_group_appearance WHERE agent_group_id = ?',
+      )
+      .get(agentGroupId) as AppearanceRow | undefined;
+    const avatar = row?.uploaded_avatar_version
+      ? { source: 'upload' as const, version: row.uploaded_avatar_version }
+      : row?.slack_avatar_version
+        ? { source: 'slack' as const, version: row.slack_avatar_version }
+        : null;
+    return { label: row?.label ?? null, avatar, hasSlackAvatar: Boolean(row?.slack_avatar_version) };
+  }
+
+  setLabel(agentGroupId: string, label: string | null): void {
+    this.db
+      .prepare(
+        `INSERT INTO agent_group_appearance (agent_group_id, label) VALUES (?, ?)
+         ON CONFLICT (agent_group_id) DO UPDATE SET label = excluded.label`,
+      )
+      .run(agentGroupId, label);
+  }
+
+  /** A null `image` removes the Avatar from that source. */
+  setAvatar(agentGroupId: string, source: AvatarSource, image: Image | null): void {
+    const c = AVATAR_COLUMNS[source];
+    this.db
+      .prepare(
+        `INSERT INTO agent_group_appearance (agent_group_id, ${c.type}, ${c.data}, ${c.version}) VALUES (?, ?, ?, ?)
+         ON CONFLICT (agent_group_id) DO UPDATE
+           SET ${c.type} = excluded.${c.type}, ${c.data} = excluded.${c.data}, ${c.version} = excluded.${c.version}`,
+      )
+      .run(agentGroupId, image?.mimeType ?? null, image?.data ?? null, image ? versionOf(image) : null);
+  }
+
+  getAvatar(agentGroupId: string): (Image & { version: string }) | null {
+    const avatar = this.getAppearance(agentGroupId).avatar;
+    if (!avatar) return null;
+    const c = AVATAR_COLUMNS[avatar.source];
+    const row = this.db
+      .prepare(`SELECT ${c.type} AS mime_type, ${c.data} AS data FROM agent_group_appearance WHERE agent_group_id = ?`)
+      .get(agentGroupId) as { mime_type: string; data: Buffer };
+    return { mimeType: row.mime_type, data: row.data, version: avatar.version };
   }
 
   close(): void {

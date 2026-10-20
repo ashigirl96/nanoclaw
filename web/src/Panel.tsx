@@ -1,6 +1,13 @@
-import { useEffect, useState } from 'react';
+import { type FormEvent, useEffect, useRef, useState } from 'react';
 
-import { type AgentGroupDetails, type AgentGroupSummary, type LibraryFile, type TaskSummary, api } from './api';
+import {
+  type AgentGroupDetails,
+  type AgentGroupSummary,
+  type LibraryFile,
+  type TaskSummary,
+  api,
+  readUpload,
+} from './api';
 import { Avatar } from './Avatar';
 import { FilePreview } from './FilePreview';
 import { CloseIcon } from './Icons';
@@ -34,7 +41,7 @@ export function Panel({ group, revision, onClose, onError }: Props) {
         </button>
       </div>
       <div className="panel-profile">
-        <Avatar id={group.id} name={group.name} size="lg" />
+        <Avatar id={group.id} name={group.name} url={group.avatarUrl} size="lg" />
         <div className="panel-name">{group.name}</div>
       </div>
       <div className="tabs" role="tablist">
@@ -52,7 +59,7 @@ export function Panel({ group, revision, onClose, onError }: Props) {
         ))}
       </div>
       <div className="panel-body" role="tabpanel">
-        {tab === 'details' && <Details agentGroupId={agentGroupId} onError={onError} />}
+        {tab === 'details' && <Details group={group} onError={onError} />}
         {tab === 'library' && <Library agentGroupId={agentGroupId} revision={revision} onError={onError} />}
         {tab === 'tasks' && <Tasks agentGroupId={agentGroupId} onError={onError} />}
       </div>
@@ -75,14 +82,27 @@ function useLoad<T>(load: () => Promise<T>, deps: unknown[], onError: (message: 
   return value;
 }
 
-function Details({ agentGroupId, onError }: { agentGroupId: string; onError: (m: string) => void }) {
-  const details = useLoad<AgentGroupDetails>(() => api.details(agentGroupId), [agentGroupId], onError);
+function Details({ group, onError }: { group: AgentGroupSummary; onError: (m: string) => void }) {
+  // The summary changes when the Label or Avatar does, so the details follow edits from any Console.
+  const details = useLoad<AgentGroupDetails>(
+    () => api.details(group.id),
+    [group.id, group.label, group.avatarUrl],
+    onError,
+  );
   const formatTime = useFormatTime();
   if (!details) return <p className="panel-note">読み込み中…</p>;
   return (
     <dl className="details">
       <dt>名前</dt>
       <dd>{details.name}</dd>
+      <dt>ラベル</dt>
+      <dd>
+        <LabelField key={details.label ?? ''} agentGroupId={details.id} label={details.label} onError={onError} />
+      </dd>
+      <dt>アバター</dt>
+      <dd>
+        <AvatarField details={details} onError={onError} />
+      </dd>
       <dt>ID</dt>
       <dd>
         <code>{details.id}</code>
@@ -94,6 +114,98 @@ function Details({ agentGroupId, onError }: { agentGroupId: string; onError: (m:
       <dt>作成</dt>
       <dd>{formatTime(details.createdAt)}</dd>
     </dl>
+  );
+}
+
+function LabelField({
+  agentGroupId,
+  label,
+  onError,
+}: {
+  agentGroupId: string;
+  label: string | null;
+  onError: (m: string) => void;
+}) {
+  const [draft, setDraft] = useState(label ?? '');
+  const [saving, setSaving] = useState(false);
+  const changed = draft.trim() !== (label ?? '');
+
+  const save = (e: FormEvent) => {
+    e.preventDefault();
+    setSaving(true);
+    api
+      .setLabel(agentGroupId, draft)
+      .catch((err: Error) => onError(err.message))
+      .finally(() => setSaving(false));
+  };
+
+  return (
+    <form className="label-field" onSubmit={save}>
+      <input
+        type="text"
+        value={draft}
+        placeholder="役割を 40 字まで"
+        aria-label="ラベル"
+        onChange={(e) => setDraft(e.target.value)}
+      />
+      {changed && (
+        <button type="submit" className="card-button" disabled={saving}>
+          保存
+        </button>
+      )}
+    </form>
+  );
+}
+
+function AvatarField({ details, onError }: { details: AgentGroupDetails; onError: (m: string) => void }) {
+  const picker = useRef<HTMLInputElement>(null);
+  const [busy, setBusy] = useState(false);
+
+  const run = (action: () => Promise<unknown>) => {
+    setBusy(true);
+    action()
+      .catch((err: Error) => onError(err.message))
+      .finally(() => setBusy(false));
+  };
+
+  return (
+    <div className="avatar-field">
+      <input
+        ref={picker}
+        type="file"
+        accept="image/png,image/jpeg,image/webp,image/gif"
+        hidden
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          e.target.value = '';
+          if (file) run(async () => api.uploadAvatar(details.id, await readUpload(file)));
+        }}
+      />
+      <button type="button" className="card-button" disabled={busy} onClick={() => picker.current?.click()}>
+        画像を選ぶ
+      </button>
+      {details.avatarSource === 'upload' && (
+        <button
+          type="button"
+          className="card-button"
+          disabled={busy}
+          onClick={() => run(() => api.removeAvatar(details.id))}
+        >
+          画像を外す
+        </button>
+      )}
+      {details.ownSlackBot && (
+        <button
+          type="button"
+          className="card-button"
+          disabled={busy}
+          onClick={() => run(() => api.refetchSlackAvatar(details.id))}
+        >
+          Slack から取り直す
+        </button>
+      )}
+      <span className="panel-hint">PNG、JPEG、WebP、GIF で 1 MB まで</span>
+    </div>
   );
 }
 
