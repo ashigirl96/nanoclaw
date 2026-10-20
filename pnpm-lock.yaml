@@ -9,8 +9,8 @@ importers:
   .:
     dependencies:
       '@chat-adapter/slack':
-        specifier: 4.29.0
-        version: 4.29.0
+        specifier: 4.41.1
+        version: 4.41.1
       '@clack/core':
         specifier: ^1.2.0
         version: 1.2.0
@@ -78,12 +78,12 @@ importers:
 
 packages:
 
-  '@chat-adapter/shared@4.29.0':
-    resolution: {integrity: sha512-ARqTDoHJHKN9rpytbFPJbNmqqx3fOg5xwsTZdlingQPAssOSeHDBdqrFJkgDhyCRGbmDtG09cuS0FkVzeoh2qg==}
+  '@chat-adapter/shared@4.41.1':
+    resolution: {integrity: sha512-ia1Ctd4mclpiNd+sYUc/fo9RXIFoBr/Z0JFFk3hue1XiFXPTJClG/BHpS+243UmSkeE5JORjY4MmW+szdhhFWw==}
     engines: {node: '>=20'}
 
-  '@chat-adapter/slack@4.29.0':
-    resolution: {integrity: sha512-s2DXAwkTpmiIKSATXgrO879s1pqFwS70Y0JPd+TRGRzDeh6nfqt5dnKt5Bug0P1zwkB6DoPurhnYS9nqhSmD/w==}
+  '@chat-adapter/slack@4.41.1':
+    resolution: {integrity: sha512-aq8sETBNrlrD13tB0pwMNf4jILRbrnc9TiDRP/Z9rVDejqDEImOrHVZgpX8ZHIJlT9cPXmJidgUPIE5iz45HLA==}
     engines: {node: '>=20'}
 
   '@clack/core@1.2.0':
@@ -1567,26 +1567,28 @@ packages:
 
 snapshots:
 
-  '@chat-adapter/shared@4.29.0':
+  '@chat-adapter/shared@4.41.1':
     dependencies:
-      chat: 4.29.0
+      chat: 4.41.1
     transitivePeerDependencies:
       - ai
       - supports-color
+      - workflow
       - zod
 
-  '@chat-adapter/slack@4.29.0':
+  '@chat-adapter/slack@4.41.1':
     dependencies:
-      '@chat-adapter/shared': 4.29.0
+      '@chat-adapter/shared': 4.41.1
       '@slack/socket-mode': 2.0.7
       '@slack/web-api': 7.19.0
-      chat: 4.29.0
+      chat: 4.41.1
     transitivePeerDependencies:
       - ai
       - bufferutil
       - debug
       - supports-color
       - utf-8-validate
+      - workflow
       - zod
 
   '@clack/core@1.2.0':
