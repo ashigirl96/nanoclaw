@@ -219,6 +219,75 @@
   opacity: 0.6;
 }
 
+.dialog-actions button.danger {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.member-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 240px;
+  overflow-y: auto;
+  margin: 0 0 12px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.member-picker legend {
+  padding: 0 4px;
+  color: var(--fg-muted);
+  font-size: 0.86em;
+}
+
+.new-agent .member-option {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 3px 0;
+}
+
+.member-list {
+  list-style: none;
+  margin: 0 0 12px;
+  padding: 0;
+}
+
+.member-list li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 0;
+}
+
+.member-name {
+  flex: 1;
+}
+
+.member-list button,
+.member-add button {
+  padding: 3px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.member-add {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.member-add select {
+  flex: 1;
+}
+
 @media (max-width: 1024px) {
   .layout.with-panel {
     grid-template-columns: var(--sidebar-width) minmax(0, 1fr);

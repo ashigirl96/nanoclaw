@@ -221,6 +221,22 @@ body.resizing {
   text-align: center;
 }
 
+.sidebar-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 14px;
+  padding: 4px 10px;
+  color: var(--fg-muted);
+  font-size: 0.8em;
+  font-weight: 600;
+}
+
+.icon-button.small {
+  width: 24px;
+  height: 24px;
+}
+
 /* Avatar */
 
 .avatar {
@@ -344,6 +360,11 @@ body.resizing {
   background: var(--bg-hover);
 }
 
+.chat-pill-meta {
+  color: var(--fg-muted);
+  font-size: 0.86em;
+}
+
 .chat-panel-toggle {
   position: absolute;
   right: 0;
@@ -388,6 +409,15 @@ body.resizing {
 
 .message.with-card {
   width: min(560px, 100%);
+}
+
+.message-author {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--fg-muted);
+  font-size: 0.82em;
+  font-weight: 600;
 }
 
 .bubble {
@@ -547,6 +577,31 @@ body.resizing {
   border: 1px solid var(--border);
   border-radius: 22px;
   background: var(--bg-raised);
+}
+
+.mention-list {
+  list-style: none;
+  margin: 0 0 6px;
+  padding: 4px;
+  border-bottom: 1px solid var(--border);
+}
+
+.mention-list button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 5px 8px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.mention-list [aria-selected='true'] button,
+.mention-list button:hover {
+  background: var(--bg-hover);
 }
 
 .composer-row {

@@ -1,11 +1,12 @@
 import type { OutboundMessage } from '../adapter.js';
-import { type ConsoleChat, storeKeyOf } from './chat.js';
+import { type ConsoleChat, chatIdOf, speakerOf } from './chat.js';
 
 export type NoticeKind = 'reply' | 'question' | 'approval';
 
 export interface Notice {
   kind: NoticeKind;
-  /** null for the Inbox. */
+  chatId: string;
+  /** The Agent Group that sent it; null for the Inbox. */
   agentGroupId: string | null;
   body: string;
 }
@@ -13,11 +14,12 @@ export interface Notice {
 export function noticeFor(chat: ConsoleChat, message: OutboundMessage): Notice | null {
   const content = (message.content ?? {}) as Record<string, unknown>;
   if (typeof content.operation === 'string') return null;
-  const agentGroupId = storeKeyOf(chat);
+  const chatId = chatIdOf(chat);
+  const agentGroupId = speakerOf(chat);
 
   if (content.type === 'ask_question' || content.type === 'post_question') {
     const body = stringOr(content.question, stringOr(content.title, ''));
-    return { kind: chat.kind === 'inbox' ? 'approval' : 'question', agentGroupId, body };
+    return { kind: chat.kind === 'inbox' ? 'approval' : 'question', chatId, agentGroupId, body };
   }
   if (chat.kind === 'inbox') return null;
 
@@ -28,7 +30,7 @@ export function noticeFor(chat: ConsoleChat, message: OutboundMessage): Notice |
     stringOr(card.title, '') ||
     stringOr(content.fallbackText, '') ||
     (message.files ?? []).map((f) => f.filename).join(', ');
-  return { kind: 'reply', agentGroupId, body };
+  return { kind: 'reply', chatId, agentGroupId, body };
 }
 
 function stringOr(value: unknown, fallback: string): string {

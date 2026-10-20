@@ -69,8 +69,8 @@ describe('unread', () => {
     await markRead('ag-a', id);
 
     expect(await events.ofType('unread', 2)).toEqual([
-      { type: 'unread', agentGroupId: 'ag-a', unread: 1 },
-      { type: 'unread', agentGroupId: 'ag-a', unread: 0 },
+      { type: 'unread', chatId: 'ag:ag-a', unread: 1 },
+      { type: 'unread', chatId: 'ag:ag-a', unread: 0 },
     ]);
     events.close();
   });

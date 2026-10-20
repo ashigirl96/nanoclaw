@@ -27,7 +27,7 @@ describe('notifications', () => {
     await h.adapter.deliver('web:ag-a', null, { kind: 'chat', content: { text: 'All done' } });
 
     expect(await events.ofType('notify', 1)).toEqual([
-      { type: 'notify', kind: 'reply', agentGroupId: 'ag-a', body: 'All done' },
+      { type: 'notify', kind: 'reply', chatId: 'ag:ag-a', agentGroupId: 'ag-a', body: 'All done' },
     ]);
     events.close();
   });
@@ -38,7 +38,7 @@ describe('notifications', () => {
     await h.adapter.deliver('web:ag-a', null, { kind: 'chat-sdk', content: question });
 
     expect(await events.ofType('notify', 1)).toEqual([
-      { type: 'notify', kind: 'question', agentGroupId: 'ag-a', body: 'Deploy to production?' },
+      { type: 'notify', kind: 'question', chatId: 'ag:ag-a', agentGroupId: 'ag-a', body: 'Deploy to production?' },
     ]);
     events.close();
   });
@@ -52,7 +52,7 @@ describe('notifications', () => {
     });
 
     expect(await events.ofType('notify', 1)).toEqual([
-      { type: 'notify', kind: 'approval', agentGroupId: null, body: 'Alice wants to install jq' },
+      { type: 'notify', kind: 'approval', chatId: 'inbox', agentGroupId: null, body: 'Alice wants to install jq' },
     ]);
     events.close();
   });
@@ -64,7 +64,7 @@ describe('notifications', () => {
     await h.adapter.deliver('web:ag-a', null, { kind: 'chat', content: { text: 'next' } });
 
     expect(await events.ofType('notify', 1)).toEqual([
-      { type: 'notify', kind: 'reply', agentGroupId: 'ag-a', body: 'next' },
+      { type: 'notify', kind: 'reply', chatId: 'ag:ag-a', agentGroupId: 'ag-a', body: 'next' },
     ]);
     events.close();
   });
@@ -84,7 +84,7 @@ describe('notifications', () => {
     await h.adapter.deliver('web:ag-a', null, { kind: 'chat', content: { text: 'next' } });
 
     expect(await events.ofType('notify', 1)).toEqual([
-      { type: 'notify', kind: 'reply', agentGroupId: 'ag-a', body: 'next' },
+      { type: 'notify', kind: 'reply', chatId: 'ag:ag-a', agentGroupId: 'ag-a', body: 'next' },
     ]);
     events.close();
   });
