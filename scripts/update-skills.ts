@@ -86,16 +86,62 @@ function readImports(file: string): string[] {
   return names;
 }
 
-export function detectInstalledSkills(root: string): InstalledSkill[] {
-  // A barrel import is not always its own install skill: /add-slack appends
-  // both slack.js and slack-a2a-guard.js, and /slack-a2a-rooms appends
-  // slack-a2a.js. Only names backed by an add-<name> skill can be refreshed.
-  const isRefreshable = (skillName: string): boolean =>
-    fs.existsSync(path.join(root, '.claude/skills', skillName, 'SKILL.md'));
+/**
+ * Which installed skill owns each barrel import, read from the skills' own
+ * `append to:<barrel>` directives.
+ *
+ * A skill may append more than one import to a barrel: `add-slack` registers
+ * both `slack.js` and the `slack-a2a-guard.js` companion module. Mapping every
+ * import to its own `add-<name>` skill would demand an `add-slack-a2a-guard`
+ * that does not and should not exist. An import a skill declares belongs to
+ * that skill; only an unclaimed one is attributed to `add-<name>`, which is
+ * what keeps the missing-skill check meaningful for a channel installed
+ * without one.
+ */
+function importOwners(root: string, barrel: string): Map<string, string> {
+  const owners = new Map<string, string>();
+  const skillsDir = path.join(root, '.claude/skills');
+  if (!fs.existsSync(skillsDir)) return owners;
 
-  const channels = readImports(path.join(root, 'src/channels/index.ts'))
-    .filter((name) => name !== 'cli')
-    .map((name) => ({ name, skillName: `add-${name}`, kind: 'channel' as const }));
+  // Sorted, so a contested import resolves the same way on every filesystem.
+  for (const skillName of fs.readdirSync(skillsDir).sort()) {
+    const skillFile = path.join(skillsDir, skillName, 'SKILL.md');
+    if (!fs.existsSync(skillFile)) continue;
+    let directives;
+    try {
+      directives = parseDirectives(fs.readFileSync(skillFile, 'utf8'));
+    } catch {
+      // A skill we cannot parse simply claims nothing; refresh reports its own
+      // parse failure with a better message than detection could.
+      continue;
+    }
+    for (const directive of directives) {
+      if (directive.kind !== 'append' || path.posix.normalize(String(directive.attrs.to)) !== barrel) continue;
+      for (const line of directive.body) {
+        const match = /^\s*import\s+['"]\.\/([a-z0-9-]+)\.js['"];?\s*$/.exec(line);
+        if (!match) continue;
+        // add-<name> always owns <name>, whichever other skill also declares it.
+        if (!owners.has(match[1]) || skillName === `add-${match[1]}`) owners.set(match[1], skillName);
+      }
+    }
+  }
+  return owners;
+}
+
+export function detectInstalledSkills(root: string): InstalledSkill[] {
+  const channelBarrel = 'src/channels/index.ts';
+  const owners = importOwners(root, channelBarrel);
+  // A skill that owns several imports is refreshed once, under its own name.
+  const channelSkills = new Set(
+    readImports(path.join(root, channelBarrel))
+      .filter((name) => name !== 'cli')
+      .map((name) => owners.get(name) ?? `add-${name}`),
+  );
+  const channels = [...channelSkills].map((skillName) => ({
+    name: skillName.startsWith('add-') ? skillName.slice('add-'.length) : skillName,
+    skillName,
+    kind: 'channel' as const,
+  }));
   const providers = new Set([
     ...readImports(path.join(root, 'src/providers/index.ts')),
     ...readImports(path.join(root, 'container/agent-runner/src/providers/index.ts')),
@@ -109,9 +155,7 @@ export function detectInstalledSkills(root: string): InstalledSkill[] {
       skillName: `add-${name}`,
       kind: 'provider' as const,
     })),
-  ]
-    .filter((skill) => isRefreshable(skill.skillName))
-    .sort((a, b) => a.skillName.localeCompare(b.skillName));
+  ].sort((a, b) => a.skillName.localeCompare(b.skillName));
 }
 
 export function resolveRegistryRemote(root: string, branch: string): string {
