@@ -1,9 +1,9 @@
-import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it, jest } from 'bun:test';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
 
-import { CodexProvider, type CodexRuntimeDeps } from './codex.js';
+import { CodexProvider, TURN_IDLE_TIMEOUT_MS, type CodexRuntimeDeps } from './codex.js';
 import type { AppServer, JsonRpcNotification, TurnParams } from './codex-app-server.js';
 import type { ProviderEvent } from './types.js';
 
@@ -194,7 +194,42 @@ describe('CodexProvider active turns', () => {
     expect(errors).toHaveLength(1);
     expect((errors[0] as { message: string }).message).toContain('app-server exited');
   });
+
+  it('keeps a turn that is still emitting notifications past the idle timeout, and cuts it once silent', async () => {
+    jest.useFakeTimers();
+    try {
+      const fake = createFakeCodexRuntime();
+      const provider = createCodexProvider({}, fake.runtime);
+      const query = provider.query({ prompt: 'long task', cwd: '/workspace/agent' });
+      const events: ProviderEvent[] = [];
+      const collect = collectEvents(query.events, events).catch(() => {});
+      await flushMicrotasks();
+      expect(fake.startCalls).toHaveLength(1);
+
+      for (let i = 0; i < 3; i++) {
+        jest.advanceTimersByTime(TURN_IDLE_TIMEOUT_MS - 1000);
+        fake.notify('item/completed', { item: { type: 'commandExecution' } });
+        await flushMicrotasks();
+      }
+      expect(events.some((event) => event.type === 'error')).toBe(false);
+
+      jest.advanceTimersByTime(TURN_IDLE_TIMEOUT_MS);
+      await flushMicrotasks();
+      query.end();
+      await collect;
+
+      const errors = events.filter((event) => event.type === 'error');
+      expect(errors).toHaveLength(1);
+      expect((errors[0] as { message: string }).message).toContain('no app-server notification');
+    } finally {
+      jest.useRealTimers();
+    }
+  });
 });
+
+async function flushMicrotasks(): Promise<void> {
+  for (let i = 0; i < 20; i++) await Promise.resolve();
+}
 
 function createFakeCodexRuntime(opts: { rejectSteer?: boolean } = {}) {
   const server = fakeServer();
@@ -243,6 +278,7 @@ function createFakeCodexRuntime(opts: { rejectSteer?: boolean } = {}) {
     completeTurn(text: string) {
       notify('turn/completed', { turn: { items: [{ type: 'agentMessage', text }] } });
     },
+    notify,
     crashServer(err: Error) {
       for (const h of [...server.exitHandlers]) h(err);
     },

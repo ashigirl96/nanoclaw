@@ -33,7 +33,9 @@ import {
   writeCodexConfigToml,
 } from './codex-app-server.js';
 
-const TURN_TIMEOUT_MS = 10 * 60 * 1000;
+// Measured from the last app-server notification, so a turn that keeps working
+// runs as long as it needs and only a silent (stuck) turn is cut.
+export const TURN_IDLE_TIMEOUT_MS = 10 * 60 * 1000;
 
 export interface CodexRuntimeDeps {
   writeCodexConfigToml: typeof writeCodexConfigToml;
@@ -284,9 +286,16 @@ async function* runOneTurn(
   };
   setAbortWaker(kick);
 
+  const timer = setTimeout(() => {
+    state.error = new Error(`Turn received no app-server notification for ${TURN_IDLE_TIMEOUT_MS}ms`);
+    finishTurn();
+    kick();
+  }, TURN_IDLE_TIMEOUT_MS);
+
   const handler = (n: JsonRpcNotification): void => {
     const method = n.method;
     const params = n.params ?? {};
+    timer.refresh();
     buffer.push({ type: 'activity' });
 
     switch (method) {
@@ -354,7 +363,7 @@ async function* runOneTurn(
   server.notificationHandlers.push(handler);
 
   // A dead app-server can't send the notification this turn is parked on —
-  // end the turn immediately with the real cause instead of the 10-min timeout.
+  // end the turn immediately with the real cause instead of the idle timeout.
   const onServerExit = (err: Error): void => {
     if (turnDone) return;
     state.error = err;
@@ -362,12 +371,6 @@ async function* runOneTurn(
     kick();
   };
   server.exitHandlers.push(onServerExit);
-
-  const timer = setTimeout(() => {
-    state.error = new Error(`Turn timed out after ${TURN_TIMEOUT_MS}ms`);
-    finishTurn();
-    kick();
-  }, TURN_TIMEOUT_MS);
 
   try {
     if (!hasInit()) {
