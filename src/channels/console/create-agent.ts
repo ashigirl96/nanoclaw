@@ -13,7 +13,7 @@ import { log } from '../../log.js';
 import { pickApprovalDelivery, pickApprover } from '../../modules/approvals/primitive.js';
 import { isAuthorizedApprovalClick } from '../../modules/approvals/response-handler.js';
 import { isGlobalAdmin, isOwner } from '../../modules/permissions/db/user-roles.js';
-import { registerResponseHandler, type ResponsePayload } from '../../response-registry.js';
+import { registerResponseHandler, type ResponseOutcome, type ResponsePayload } from '../../response-registry.js';
 import { createAgentFromTemplate } from '../../templates/create-agent.js';
 import type { PendingApproval } from '../../types.js';
 import { hasLocalTemplate, listTemplatesFromDir, templateDescription } from '../../templates/library.js';
@@ -137,7 +137,7 @@ async function requestApproval(request: CreateRequest): Promise<void> {
   log.info('Console asked for approval to create an Agent Group', { approvalId, approver: target.userId });
 }
 
-async function handleApprovalPress(payload: ResponsePayload): Promise<boolean> {
+async function handleApprovalPress(payload: ResponsePayload): Promise<ResponseOutcome | false> {
   const approval = await getPendingApproval(payload.questionId);
   if (!approval || approval.action !== CONSOLE_CREATE_AGENT) return false;
   if (!(await isAuthorizedApprovalClick(approval, payload))) {
@@ -145,20 +145,22 @@ async function handleApprovalPress(payload: ResponsePayload): Promise<boolean> {
       approvalId: approval.approval_id,
       userId: payload.userId,
     });
-    return true;
+    return 'refused';
   }
 
+  let outcome: ResponseOutcome = 'accepted';
   try {
-    if (
-      payload.value === 'approve' &&
-      (await transitionPendingApprovalStatus(approval.approval_id, 'pending', 'approved'))
-    ) {
-      await replayApproved(approval);
+    if (payload.value === 'approve') {
+      if (await transitionPendingApprovalStatus(approval.approval_id, 'pending', 'approved')) {
+        await replayApproved(approval);
+      } else {
+        outcome = 'ignored';
+      }
     }
   } finally {
     await deletePendingApproval(approval.approval_id);
   }
-  return true;
+  return outcome;
 }
 
 async function replayApproved(approval: PendingApproval): Promise<void> {
