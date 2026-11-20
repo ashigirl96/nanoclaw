@@ -24,6 +24,7 @@
  *
  * Failures surface to the requesting agent via notifyAgent — never silent.
  */
+import { quoteForCard } from '../../card-text.js';
 import { getAgentGroup } from '../../db/agent-groups.js';
 import {
   getAllMessagingGroups,
@@ -39,8 +40,7 @@ import {
   getDestinationByTarget,
   normalizeName,
 } from '../agent-to-agent/db/agent-destinations.js';
-import { slackConversationsMembers } from '../../channels/slack-form-read.js';
-import { botTokenKeyForInstance, slackAuthTest } from '../../channels/slack-lib.js';
+import { botTokenKeyForInstance, slackAuthTest, slackConversationsMembers } from '../../channels/slack-lib.js';
 import { notifyAgent, requestApproval } from '../approvals/index.js';
 import { readEnvValue } from './env-file.js';
 import { ensureAgentRoom, publicPurpose, resolveOperatorSlackUserId, type RoomParticipant } from './orchestrate.js';
@@ -204,10 +204,10 @@ export async function requestCreateRoomHold(content: Record<string, unknown>, se
       ...(typeof content.purpose === 'string' ? { purpose: content.purpose } : {}),
       ...(content.include_me === false ? { include_me: false } : {}),
     },
-    title: `Create room: ${name}`,
+    title: `Create room: ${quoteForCard(name)}`,
     question:
-      `Agent "${sourceGroup.name}" wants to open a shared Slack room "${name}" with you and ` +
-      `${agents.join(', ')}${content.include_me === false ? ' (without itself)' : ''}. Approve?`,
+      `Agent ${quoteForCard(sourceGroup.name)} wants to open a shared Slack room ${quoteForCard(name)} with you and ` +
+      `${agents.map(quoteForCard).join(', ')}${content.include_me === false ? ' (without itself)' : ''}. Approve?`,
   });
 }
 
@@ -320,10 +320,10 @@ export async function requestAddToRoomHold(content: Record<string, unknown>, ses
     agentName: sourceGroup.name,
     action: 'add_to_room',
     payload: { room, agent },
-    title: `Add ${agent} to room: ${room}`,
+    title: `Add ${quoteForCard(agent)} to room: ${quoteForCard(room)}`,
     question:
-      `Agent "${sourceGroup.name}" wants to add agent "${agent}" to the shared Slack room "${room}" ` +
-      `(this opens a new group conversation with everyone plus "${agent}"). Approve?`,
+      `Agent ${quoteForCard(sourceGroup.name)} wants to add agent ${quoteForCard(agent)} to the shared Slack room ${quoteForCard(room)} ` +
+      `(this opens a new group conversation with everyone plus ${quoteForCard(agent)}). Approve?`,
   });
 }
 

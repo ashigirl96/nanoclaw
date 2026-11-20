@@ -21,6 +21,7 @@
  * one); all requester notifications go through the approvals module's
  * notifyAgent. Token values never appear in notify texts or logs.
  */
+import { quoteForCard } from '../../card-text.js';
 import { SlackApiError } from '../../channels/slack-lib.js';
 import { reenterGuardedDeliveryAction, registerDeliveryAction, registerDeliveryBatchPreview } from '../../delivery.js';
 import { getAgentGroup } from '../../db/agent-groups.js';
@@ -200,7 +201,7 @@ async function slackAwareCreateAgent(content: Record<string, unknown>, session: 
   // suppressed: it fires BEFORE Slack provisioning, so relaying it would
   // report "done" ~a minute early — this wrapper's successText/failureText
   // is the only completion signal. Upstream error notifies (collision,
-  // invalid path) still fire either way.
+  // invalid folder) still fire either way.
   await createAgent(content, session, slackOrigin ? { suppressCreatedNotify: true } : undefined);
 
   const after = await getDestinationByName(session.agent_group_id, localName);
@@ -246,9 +247,9 @@ async function requestSlackCreateAgentHold(content: Record<string, unknown>, ses
       // room the multi-create pattern deliberately skipped.
       ...(content.room === 'none' ? { room: 'none' } : {}),
     },
-    title: `Create agent: ${name}`,
+    title: `Create agent: ${quoteForCard(name)}`,
     question:
-      `Agent "${sourceGroup.name}" wants to create a new sub-agent "${name}" AND provision a dedicated ` +
+      `Agent ${quoteForCard(sourceGroup.name)} wants to create a new sub-agent ${quoteForCard(name)} AND provision a dedicated ` +
       `Slack bot for it (new Slack app, DM with you, and a shared three-way room).${templateApprovalNote(content)} Approve?`,
   });
 }
