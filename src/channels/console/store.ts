@@ -222,8 +222,7 @@ export class ConsoleStore {
 
   lastMessage(chatId: string): ChatMessage | null {
     const row = this.db.prepare('SELECT * FROM messages WHERE chat_id = ? ORDER BY seq DESC LIMIT 1').get(chatId) as
-      | MessageRow
-      | undefined;
+      MessageRow | undefined;
     return row ? this.hydrate([row])[0] : null;
   }
 
@@ -257,8 +256,7 @@ export class ConsoleStore {
   /** false when the message is not in this Chat. */
   markRead(chatId: string, messageId: string): boolean {
     const row = this.db.prepare('SELECT seq FROM messages WHERE id = ? AND chat_id = ?').get(messageId, chatId) as
-      | { seq: number }
-      | undefined;
+      { seq: number } | undefined;
     if (!row) return false;
     this.db
       .prepare(
@@ -325,8 +323,7 @@ export class ConsoleStore {
 
   getFile(id: string): (StoredFile & { data: Buffer }) | null {
     const row = this.db.prepare('SELECT id, name, mime_type, data FROM files WHERE id = ?').get(id) as
-      | (FileRow & { data: Buffer })
-      | undefined;
+      (FileRow & { data: Buffer }) | undefined;
     return row ? { id: row.id, name: row.name, mimeType: row.mime_type, data: row.data } : null;
   }
 
