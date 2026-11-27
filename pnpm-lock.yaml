@@ -18,8 +18,8 @@ importers:
         specifier: ^1.2.0
         version: 1.2.0
       '@onecli-sh/sdk':
-        specifier: 2.2.1
-        version: 2.2.1
+        specifier: 2.8.0
+        version: 2.8.0
       better-sqlite3:
         specifier: 13.2.0
         version: 13.2.0
@@ -349,8 +349,8 @@ packages:
       '@emnapi/core': ^1.7.1 || 2.0.0-beta.2
       '@emnapi/runtime': ^1.7.1 || 2.0.0-beta.2
 
-  '@onecli-sh/sdk@2.2.1':
-    resolution: {integrity: sha512-q2mCW4ZsARlLEoTxz/P0NQ4MiCh7Z2n28pxkSc7srS+tozyw40PdTnWYW7NI8hfSYplZTx5856Adq1iPi4KN3Q==}
+  '@onecli-sh/sdk@2.8.0':
+    resolution: {integrity: sha512-5xKkMSMnyLiPAwUGTZrIE144LQJMScERh8+x33lStBTjazrRRRf62UgNuCM7FiKMcFAzH5+WwsoBcoZp/MQcbg==}
     engines: {node: '>=20'}
 
   '@oxc-project/types@0.156.0':
@@ -1808,7 +1808,7 @@ snapshots:
       '@tybys/wasm-util': 0.10.5
     optional: true
 
-  '@onecli-sh/sdk@2.2.1': {}
+  '@onecli-sh/sdk@2.8.0': {}
 
   '@oxc-project/types@0.156.0': {}
 
